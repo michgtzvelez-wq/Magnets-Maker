@@ -1,0 +1,1419 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Button Magnet Sheet Builder</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root{
+    --paper:#FAF6EC;
+    --card:#FFFFFF;
+    --line:#E4DAC6;
+    --ink:#2B2620;
+    --ink-soft:#6E6455;
+    --mat:#2E6E5C;
+    --mat-dark:#1F4E41;
+    --mat-tint:#E7F1EC;
+    --tape:#E3B23C;
+    --rust:#B24632;
+    --rust-tint:#F7E7E2;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    font-size:14px;
+    line-height:1.4;
+  }
+  .app{max-width:1320px;margin:0 auto;padding:20px 20px 40px;}
+
+  /* ---- header ---- */
+  .masthead{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:8px;}
+  .masthead h1{
+    font-family:Georgia,'Iowan Old Style',serif;
+    font-size:26px;font-weight:700;margin:0;letter-spacing:.2px;
+  }
+  .masthead .sub{color:var(--ink-soft);font-size:13px;}
+
+  .formats{display:flex;gap:14px;margin-bottom:16px;flex-wrap:wrap;}
+  .format-card{
+    flex:1;min-width:230px;
+    background:var(--card);
+    border:1.5px solid var(--line);
+    border-radius:var(--radius);
+    padding:14px 16px;
+    cursor:pointer;
+    transition:border-color .15s, box-shadow .15s;
+    position:relative;
+  }
+  .format-card:hover{border-color:var(--mat);}
+  .format-card.active{
+    border-color:var(--mat);
+    box-shadow:0 0 0 3px var(--mat-tint) inset, 0 2px 10px rgba(46,110,92,.12);
+  }
+  .format-card .kicker{font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.06em;}
+  .format-card h3{margin:2px 0 4px;font-size:17px;}
+  .format-card .count{font-size:13px;color:var(--mat-dark);font-weight:600;}
+  .format-card .desc{font-size:12.5px;color:var(--ink-soft);margin-top:4px;}
+  .format-card .check{
+    position:absolute;top:12px;right:14px;width:18px;height:18px;border-radius:50%;
+    border:1.5px solid var(--line);background:#fff;
+  }
+  .format-card.active .check{background:var(--mat);border-color:var(--mat);}
+  .format-card.active .check::after{
+    content:'';position:absolute;left:5px;top:2px;width:5px;height:9px;
+    border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg);
+  }
+
+  /* ---- toolbar ---- */
+  .toolbar{
+    display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:9px 10px;margin-bottom:16px;
+  }
+  .btn{
+    font:inherit;font-size:13px;font-weight:600;
+    padding:8px 13px;border-radius:7px;border:1px solid var(--line);
+    background:#fff;color:var(--ink);cursor:pointer;white-space:nowrap;
+  }
+  .btn:hover{border-color:var(--mat);color:var(--mat-dark);}
+  .btn.primary{background:var(--mat);border-color:var(--mat);color:#fff;}
+  .btn.primary:hover{background:var(--mat-dark);border-color:var(--mat-dark);color:#fff;}
+  .btn.danger:hover{border-color:var(--rust);color:var(--rust);}
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+  .toolbar .spacer{flex:1;}
+  .toolbar .capacity-pill{
+    font-size:12.5px;color:var(--ink-soft);background:var(--mat-tint);
+    padding:6px 11px;border-radius:20px;white-space:nowrap;
+  }
+  .toolbar .capacity-pill b{color:var(--mat-dark);}
+
+  /* ---- workspace ---- */
+  .workspace{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;}
+  .stage-col{flex:1 1 560px;min-width:320px;}
+  .stage-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px;}
+  .sheet-tabs{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;}
+  .sheet-tab{
+    font-size:12.5px;font-weight:600;padding:5px 11px;border-radius:6px;
+    border:1px solid var(--line);background:#fff;cursor:pointer;color:var(--ink-soft);
+  }
+  .sheet-tab.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+  .stage-wrap{display:flex;justify-content:center;background:#EFE9DC;border-radius:8px;padding:16px;overflow:auto;}
+  #stageCanvas{background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.15);max-width:100%;height:auto;touch-action:none;user-select:none;}
+  .stage-empty{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    color:var(--ink-soft);text-align:center;padding:60px 20px;gap:6px;
+  }
+  .stage-empty b{color:var(--ink);}
+
+  .editor-col{width:320px;flex:0 0 320px;}
+  .editor-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px;margin-bottom:14px;}
+  .editor-card h4{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);}
+  .segmented{display:flex;background:var(--mat-tint);border-radius:8px;padding:3px;margin-bottom:12px;}
+  .segmented button{
+    flex:1;border:none;background:transparent;padding:6px 4px;font-size:12px;font-weight:600;
+    border-radius:6px;cursor:pointer;color:var(--mat-dark);
+  }
+  .segmented button.active{background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.12);}
+  .field{margin-bottom:11px;}
+  .field label{display:block;font-size:12px;color:var(--ink-soft);margin-bottom:4px;}
+  .field input[type=range]{width:100%;}
+  .field input[type=text], .field input[type=number], .field select{
+    width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font:inherit;background:#fff;
+  }
+  .rowfields{display:flex;gap:8px;}
+  .rowfields .field{flex:1;}
+  .swatchgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
+  .swatch{
+    border:1.5px solid var(--line);border-radius:7px;padding:7px 4px;font-size:11px;text-align:center;
+    cursor:pointer;background:#fff;
+  }
+  .swatch.active{border-color:var(--mat);background:var(--mat-tint);color:var(--mat-dark);font-weight:700;}
+  .cat-label{font-size:12px;color:var(--ink-soft);font-weight:600;margin:10px 0 5px;}
+  .cat-label:first-child{margin-top:0;}
+  .empty-hint{font-size:12.5px;color:var(--ink-soft);}
+  .checkline{display:flex;align-items:center;gap:7px;font-size:12.5px;margin-bottom:8px;}
+
+  /* ---- filmstrip ---- */
+  .filmstrip{margin-top:16px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:12px;}
+  .filmstrip h4{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);}
+  .filmstrip-row{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;}
+  .filmcard{
+    flex:0 0 104px;border:1.5px solid var(--line);border-radius:8px;padding:6px;cursor:pointer;background:#fff;position:relative;
+  }
+  .filmcard.active{border-color:var(--mat);box-shadow:0 0 0 3px var(--mat-tint);}
+  .filmcard .pick{position:absolute;top:4px;left:4px;width:16px;height:16px;z-index:2;accent-color:var(--mat);cursor:pointer;}
+  .filmcard img{width:100%;height:78px;object-fit:cover;border-radius:5px;display:block;background:#eee;}
+  .filmcard .qtyrow{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:5px;}
+  .filmcard .qtyrow button{width:20px;height:20px;border-radius:5px;border:1px solid var(--line);background:#fff;cursor:pointer;font-size:13px;line-height:1;flex:0 0 auto;}
+  .filmcard .qtyrow .qtyinput{width:38px;font-size:12px;font-weight:700;text-align:center;border:1px solid var(--line);border-radius:5px;padding:2px 0;-moz-appearance:textfield;}
+  .filmcard .rm{
+    position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;
+    background:var(--rust);color:#fff;border:2px solid var(--paper);font-size:11px;line-height:14px;text-align:center;cursor:pointer;
+  }
+  .add-tile{
+    flex:0 0 104px;height:104px;border:1.5px dashed var(--line);border-radius:8px;
+    display:flex;align-items:center;justify-content:center;color:var(--ink-soft);cursor:pointer;font-size:26px;
+  }
+  .add-tile:hover{border-color:var(--mat);color:var(--mat);}
+
+  .layer-card{border:1px solid var(--line);border-radius:8px;padding:9px;margin-bottom:10px;position:relative;background:#FFFEFB;}
+  .layer-card .rm{position:absolute;top:6px;right:6px;width:18px;height:18px;border-radius:50%;background:var(--rust);color:#fff;border:none;font-size:11px;line-height:18px;text-align:center;cursor:pointer;padding:0;}
+  .layer-card .field{margin-bottom:8px;}
+  .layer-card input[type=color]{width:34px;height:26px;padding:2px;border:1px solid var(--line);border-radius:6px;background:#fff;cursor:pointer;}
+  .colorfield{display:flex;align-items:center;gap:7px;}
+  .colorfield label{font-size:12px;color:var(--ink-soft);margin:0;}
+  .add-layer{width:100%;border:1.5px dashed var(--line);background:transparent;border-radius:8px;padding:9px;font:inherit;font-weight:600;font-size:12.5px;color:var(--mat-dark);cursor:pointer;}
+  .add-layer:hover{border-color:var(--mat);}
+  .settings-toggle{font-size:12px;color:var(--mat-dark);cursor:pointer;text-decoration:underline;}
+  .settings-panel{display:none;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);}
+  .settings-panel.open{display:block;}
+  footer.hint{margin-top:18px;font-size:12px;color:var(--ink-soft);text-align:center;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="masthead">
+    <div>
+      <h1>Button Magnet Sheet Builder</h1>
+      <div class="sub">50&times;50mm photo magnets &middot; A4 or Letter &middot; Epson ET-2903</div>
+    </div>
+    <div class="settings-toggle" id="settingsToggle">Sheet settings</div>
+  </div>
+
+  <div class="formats" id="formatCards"></div>
+
+  <div class="settings-panel" id="settingsPanel">
+    <div class="stage-card" style="margin-bottom:16px;">
+      <div class="rowfields">
+        <div class="field"><label>Magnet cut size (mm)</label><input type="number" id="setCut" step="1" min="20" max="100"></div>
+        <div class="field"><label>Printed image size / bleed (mm)</label><input type="number" id="setBleed" step="1" min="20" max="120"></div>
+        <div class="field"><label>Page margin (mm)</label><input type="number" id="setMargin" step="1" min="0" max="20"></div>
+        <div class="field"><label>Cutter gap between tiles (mm)</label><input type="number" id="setGap" step="1" min="0" max="30"></div>
+      </div>
+      <div class="empty-hint">Bleed is how big each printed square is before cutting &mdash; make it a few mm larger than the cut size so no white edge shows. Roughly 55&ndash;56mm bleed prints at about 620&times;620px on a 300&nbsp;DPI file.</div>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <button class="btn primary" id="btnAdd">+ Select photos</button>
+    <button class="btn" id="btnClear">Clear all</button>
+    <button class="btn danger" id="btnRemove">Remove selected</button>
+    <button class="btn" id="btnReplace">Replace selected</button>
+    <button class="btn" id="btnSaveTpl">Save template</button>
+    <button class="btn" id="btnLoadTpl">Load template</button>
+    <div class="spacer"></div>
+    <span class="capacity-pill" id="capacityPill"></span>
+    <button class="btn primary" id="btnExport">Export print-ready PDF</button>
+  </div>
+  <input type="file" id="fileAdd" accept="image/*" multiple style="display:none">
+  <input type="file" id="fileReplace" accept="image/*" style="display:none">
+
+  <div class="workspace">
+    <div class="stage-col">
+      <div class="stage-card">
+        <div class="sheet-tabs" id="sheetTabs"></div>
+        <div class="stage-wrap"><canvas id="stageCanvas" width="630" height="891"></canvas></div>
+      </div>
+    </div>
+
+    <div class="editor-col">
+      <div class="editor-card" id="editorPanel"></div>
+      <div class="editor-card" id="textPanel"></div>
+    </div>
+  </div>
+
+  <div class="filmstrip">
+    <h4>Selected photos</h4>
+    <div class="filmstrip-row" id="filmstripRow"></div>
+  </div>
+
+  <footer class="hint">Everything renders in your browser. Export builds a multi-page PDF sized to A4, ready to send straight to the ET-2903.</footer>
+</div>
+
+<script>
+const { jsPDF } = window.jspdf;
+
+const state = {
+  format: 'cutter',
+  cutMM: 50,
+  bleedMM: 56,
+  marginMM: 6,
+  gapMM: 9,
+  photos: [],              // {id,img,name,qty,zoom,offX,offY,filter,frame}
+  selectedIds: new Set(),  // photos currently being edited together
+  primaryId: null,         // whose values populate the sliders
+  activeSheet: 0,
+  textLayers: [],          // {id,text,font,size,color,bg,bgColor,bgOpacity,x,y}
+  editorTab: 'photo'
+};
+
+const FONTS = [
+  {id:"'Helvetica Neue',Arial,sans-serif", label:'Sans'},
+  {id:"Georgia,'Times New Roman',serif", label:'Serif'},
+  {id:"'Trebuchet MS',sans-serif", label:'Rounded'},
+  {id:"'Courier New',monospace", label:'Typewriter'},
+  {id:"'Brush Script MT',cursive", label:'Script'},
+  {id:"'Comic Sans MS',cursive", label:'Playful'}
+];
+
+const FILTERS = [
+  {id:'none', label:'None', css:''},
+  {id:'bw', label:'B & W', css:'grayscale(100%)'},
+  {id:'hicontrast', label:'High-contrast B&W', css:'grayscale(100%) contrast(145%)'},
+  {id:'sepia', label:'Sepia', css:'sepia(85%)'},
+  {id:'vintage', label:'Vintage', css:'sepia(35%) contrast(108%) brightness(96%) saturate(120%)'},
+  {id:'vivid', label:'Vivid', css:'saturate(165%) contrast(106%)'},
+  {id:'cool', label:'Cool tone', css:'hue-rotate(190deg) saturate(115%)'},
+  {id:'warm', label:'Warm tone', css:'hue-rotate(-12deg) saturate(112%) brightness(104%)'}
+];
+const FRAME_CATEGORIES = ['Elegant','Celebrations & occasions','Nature','Minimal','Sweet','Professions','Sports'];
+const FRAMES = [
+  {id:'none', label:'None', category:null},
+  {id:'gold-ornate', label:'Ornate gold', category:'Elegant'},
+  {id:'wedding', label:'Wedding', category:'Elegant'},
+  {id:'filmreel', label:'Film reel', category:'Celebrations & occasions'},
+  {id:'western', label:'Western', category:'Celebrations & occasions'},
+  {id:'genderreveal', label:'Gender reveal', category:'Celebrations & occasions'},
+  {id:'newborn', label:'New born', category:'Celebrations & occasions'},
+  {id:'kids', label:'Kids', category:'Celebrations & occasions'},
+  {id:'waves', label:'Ocean waves', category:'Nature'},
+  {id:'clouds', label:'Clouds', category:'Nature'},
+  {id:'forest', label:'Forest', category:'Nature'},
+  {id:'flowers', label:'Flower corners', category:'Nature'},
+  {id:'flower-wreath', label:'Flower wreath', category:'Nature'},
+  {id:'twig-rustic', label:'Rustic twig', category:'Nature'},
+  {id:'minimal-thin', label:'Thin line', category:'Minimal'},
+  {id:'minimal-double', label:'Double line', category:'Minimal'},
+  {id:'minimal-dotted', label:'Dotted', category:'Minimal'},
+  {id:'minimal-brackets', label:'Corner marks', category:'Minimal'},
+  {id:'hearts', label:'Hearts', category:'Sweet'},
+  {id:'dentist', label:'Dentist', category:'Professions'},
+  {id:'medical', label:'Doctor / medical', category:'Professions'},
+  {id:'construction', label:'Construction', category:'Professions'},
+  {id:'football', label:'American football', category:'Sports'},
+  {id:'soccer', label:'Soccer', category:'Sports'},
+  {id:'baseball', label:'Baseball', category:'Sports'},
+  {id:'basketball', label:'Basketball', category:'Sports'}
+];
+
+let uid = 1;
+
+// ---------- layout math ----------
+// Page sizes in mm. Letter uses fixed 10mm margin/gap regardless of the shared cutter settings.
+const PAGE_SIZES = {
+  a4: { w:210, h:297 },
+  letter: { w:215.9, h:279.4 }
+};
+function formatSpacing(format, marginMM, gapMM){
+  if(format === 'letter') return { margin:10, gap:10 };
+  if(format === 'cutter') return { margin:marginMM, gap:gapMM };
+  return { margin:marginMM, gap:0 };
+}
+function computeLayout(format, cutMM, bleedMM, marginMM, gapMM){
+  const { margin, gap } = formatSpacing(format, marginMM, gapMM);
+  const pageKey = format === 'letter' ? 'letter' : 'a4';
+  const size = PAGE_SIZES[pageKey];
+  function fit(pw, ph){
+    const usableW = pw - 2*margin, usableH = ph - 2*margin;
+    const cols = Math.max(0, Math.floor((usableW + gap) / (bleedMM + gap)));
+    const rows = Math.max(0, Math.floor((usableH + gap) / (bleedMM + gap)));
+    return {cols, rows, cap: cols*rows, pw, ph, margin, gap};
+  }
+  const portrait = fit(size.w, size.h);
+  const landscape = fit(size.h, size.w);
+  return landscape.cap > portrait.cap ? {...landscape, orientation:'landscape', pageKey} : {...portrait, orientation:'portrait', pageKey};
+}
+
+function totalTiles(){ return state.photos.reduce((s,p)=>s+p.qty,0); }
+function selectedPhotos(){ return state.photos.filter(p=>state.selectedIds.has(p.id)); }
+function primaryPhoto(){ return state.photos.find(p=>p.id===state.primaryId) || selectedPhotos()[0] || null; }
+function expandedTiles(){
+  const arr=[];
+  state.photos.forEach(p=>{ for(let i=0;i<p.qty;i++) arr.push(p); });
+  return arr;
+}
+
+// ---------- format cards ----------
+function renderFormatCards(){
+  const cutterLayout = computeLayout('cutter', state.cutMM, state.bleedMM, state.marginMM, state.gapMM);
+  const guillotineLayout = computeLayout('guillotine', state.cutMM, state.bleedMM, state.marginMM, state.gapMM);
+  const letterLayout = computeLayout('letter', state.cutMM, state.bleedMM, state.marginMM, state.gapMM);
+  const el = document.getElementById('formatCards');
+  el.innerHTML = '';
+  [
+    {key:'cutter', title:'Cutter only (A4)', layout:cutterLayout, desc:'Extra spacing between tiles so the die-cut punch has room to align each square.'},
+    {key:'guillotine', title:'Guillotine only (A4)', layout:guillotineLayout, desc:'Tiles packed edge to edge, no borders drawn &mdash; more magnets per sheet.'},
+    {key:'letter', title:'Cutter (Letter 8.5\u2033\u00d711\u2033)', layout:letterLayout, desc:'Same magnet size, fixed 10mm margins and gaps on a US Letter sheet, with guillotine guide lines through the middle of every gap.'}
+  ].forEach(f=>{
+    const card = document.createElement('div');
+    card.className = 'format-card' + (state.format===f.key ? ' active':'');
+    card.innerHTML = `
+      <div class="check"></div>
+      <div class="kicker">${f.layout.orientation}</div>
+      <h3>${f.title}</h3>
+      <div class="count">${f.layout.cap} per sheet</div>
+      <div class="desc">${f.desc}</div>`;
+    card.onclick = ()=>{ state.format = f.key; state.activeSheet = 0; renderAll(); };
+    el.appendChild(card);
+  });
+}
+
+// ---------- filmstrip ----------
+function renderFilmstrip(){
+  const row = document.getElementById('filmstripRow');
+  row.innerHTML = '';
+  state.photos.forEach(p=>{
+    const card = document.createElement('div');
+    card.className = 'filmcard' + (state.selectedIds.has(p.id) ? ' active':'');
+    card.innerHTML = `
+      <input type="checkbox" class="pick" title="Add to multi-select">
+      <div class="rm" title="Remove">&times;</div>
+      <img src="${p.thumb}">
+      <div class="qtyrow">
+        <button class="dec">&minus;</button>
+        <input type="number" class="qtyinput" min="1" max="200" value="${p.qty}">
+        <button class="inc">+</button>
+      </div>`;
+    card.querySelector('.pick').checked = state.selectedIds.has(p.id);
+    card.querySelector('.pick').onclick = (e)=>{
+      e.stopPropagation();
+      if(e.target.checked){ state.selectedIds.add(p.id); state.primaryId=p.id; }
+      else { state.selectedIds.delete(p.id); if(state.primaryId===p.id) state.primaryId = selectedPhotos()[0]?.id ?? null; }
+      renderAll();
+    };
+    card.querySelector('img').onclick = ()=>{ state.selectedIds = new Set([p.id]); state.primaryId=p.id; renderAll(); };
+    card.querySelector('.rm').onclick = (e)=>{ e.stopPropagation(); removePhoto(p.id); };
+    card.querySelector('.inc').onclick = (e)=>{ e.stopPropagation(); p.qty=Math.min(200,p.qty+1); renderAll(); };
+    card.querySelector('.dec').onclick = (e)=>{ e.stopPropagation(); p.qty=Math.max(1,p.qty-1); renderAll(); };
+    const qtyInput = card.querySelector('.qtyinput');
+    qtyInput.onclick = (e)=> e.stopPropagation();
+    qtyInput.onchange = (e)=>{
+      let v = parseInt(e.target.value,10);
+      if(isNaN(v)) v = 1;
+      p.qty = Math.max(1, Math.min(200, v));
+      renderAll();
+    };
+    row.appendChild(card);
+  });
+  const add = document.createElement('div');
+  add.className = 'add-tile';
+  add.textContent = '+';
+  add.onclick = ()=> document.getElementById('fileAdd').click();
+  row.appendChild(add);
+}
+
+function removePhoto(id){
+  state.photos = state.photos.filter(p=>p.id!==id);
+  state.selectedIds.delete(id);
+  if(state.primaryId===id) state.primaryId = selectedPhotos()[0]?.id ?? null;
+  renderAll();
+}
+function removeSelected(){
+  const ids = new Set(state.selectedIds);
+  state.photos = state.photos.filter(p=>!ids.has(p.id));
+  state.selectedIds.clear();
+  state.primaryId = null;
+  renderAll();
+}
+
+// ---------- editor panel ----------
+// Sliders/swatches read their starting value from the primary photo, but
+// any change is applied to every currently-selected photo at once.
+function renderEditorPanel(){
+  const el = document.getElementById('editorPanel');
+  const group = selectedPhotos();
+  const p = primaryPhoto();
+  if(!p){
+    el.innerHTML = `<h4>Editor</h4><div class="empty-hint">Click any magnet in the sheet preview to edit it &mdash; drag it to reposition, scroll to zoom, or Shift+click to select several at once and edit them together.</div>`;
+    return;
+  }
+  const n = group.length;
+  el.innerHTML = `
+    <h4>Editing ${n} photo${n===1?'':'s'}</h4>
+    <div class="segmented" id="editorTabs">
+      <button data-tab="photo">Photo</button>
+      <button data-tab="filters">Filters</button>
+      <button data-tab="frames">Frames</button>
+    </div>
+    <div id="editorBody"></div>
+  `;
+  el.querySelectorAll('#editorTabs button').forEach(b=>{
+    if(b.dataset.tab===state.editorTab) b.classList.add('active');
+    b.onclick = ()=>{ state.editorTab=b.dataset.tab; renderAll(); };
+  });
+  const body = document.getElementById('editorBody');
+  if(state.editorTab==='photo'){
+    body.innerHTML = `
+      <div class="field"><label>Zoom (<span id="zoomVal">${p.zoom.toFixed(2)}</span>x)</label>
+        <input type="range" id="zoomRange" min="1" max="2.5" step="0.02" value="${p.zoom}"></div>
+      <div class="field"><label>Move horizontally</label>
+        <input type="range" id="offXRange" min="-0.5" max="0.5" step="0.01" value="${p.offX}"></div>
+      <div class="field"><label>Move vertically</label>
+        <input type="range" id="offYRange" min="-0.5" max="0.5" step="0.01" value="${p.offY}"></div>
+      <button class="btn" id="btnResetCrop" style="width:100%;margin-top:2px;">Reset position</button>`;
+    document.getElementById('zoomRange').oninput = e=>{
+      const v=parseFloat(e.target.value); group.forEach(ph=>ph.zoom=v);
+      document.getElementById('zoomVal').textContent = v.toFixed(2); renderStage();
+    };
+    document.getElementById('offXRange').oninput = e=>{ const v=parseFloat(e.target.value); group.forEach(ph=>ph.offX=v); renderStage(); };
+    document.getElementById('offYRange').oninput = e=>{ const v=parseFloat(e.target.value); group.forEach(ph=>ph.offY=v); renderStage(); };
+    document.getElementById('btnResetCrop').onclick = ()=>{ group.forEach(ph=>{ph.zoom=1;ph.offX=0;ph.offY=0;}); renderAll(); };
+  } else if(state.editorTab==='filters'){
+    body.innerHTML = `<div class="swatchgrid">${FILTERS.map(f=>`<div class="swatch ${p.filter===f.id?'active':''}" data-f="${f.id}">${f.label}</div>`).join('')}</div>`;
+    body.querySelectorAll('.swatch').forEach(s=> s.onclick=()=>{ group.forEach(ph=>ph.filter=s.dataset.f); renderAll(); });
+  } else if(state.editorTab==='frames'){
+    body.innerHTML = FRAME_CATEGORIES.map(cat=>{
+      const items = FRAMES.filter(f=>f.category===cat);
+      return `<div class="cat-label">${cat}</div><div class="swatchgrid">${items.map(f=>`<div class="swatch ${p.frame===f.id?'active':''}" data-f="${f.id}">${f.label}</div>`).join('')}</div>`;
+    }).join('') + `<div class="cat-label">Other</div><div class="swatchgrid"><div class="swatch ${p.frame==='none'?'active':''}" data-f="none">None</div></div>`;
+    body.querySelectorAll('.swatch').forEach(s=> s.onclick=()=>{ group.forEach(ph=>ph.frame=s.dataset.f); renderAll(); });
+  }
+}
+
+// ---------- text overlays (printed on every magnet: name, phone, social, etc.) ----------
+let textUid = 1;
+function newTextLayer(){
+  return { id:'t'+(textUid++), text:'', font:FONTS[0].id, size:0.075, color:'#ffffff',
+           bg:true, bgColor:'#000000', bgOpacity:0.45, x:0.5, y:0.87, icon:'none', customImg:null };
+}
+const SOCIAL_ICONS = [
+  {id:'none', label:'No icon'},
+  {id:'instagram', label:'Instagram'},
+  {id:'facebook', label:'Facebook'},
+  {id:'tiktok', label:'TikTok'},
+  {id:'whatsapp', label:'WhatsApp'},
+  {id:'youtube', label:'YouTube'},
+  {id:'twitter', label:'X / Twitter'},
+  {id:'phone', label:'Phone'},
+  {id:'website', label:'Website'},
+  {id:'email', label:'Email'},
+  {id:'custom', label:'Upload your logo'}
+];
+
+function renderTextPanel(){
+  const el = document.getElementById('textPanel');
+  const layers = state.textLayers;
+  el.innerHTML = `<h4>Text &amp; social on every magnet</h4>
+    <div class="empty-hint" style="margin-bottom:10px;">Add a line for anything a client should see &mdash; a name, phone number, or social handle. Pick an icon to pair with it, or upload your own logo, each with its own colors and position.</div>
+    <div id="layerList"></div>
+    <button class="add-layer" id="btnAddLayer" ${layers.length>=5?'disabled':''}>+ Add text line</button>`;
+  const list = document.getElementById('layerList');
+  layers.forEach((L, idx)=>{
+    const card = document.createElement('div');
+    card.className = 'layer-card';
+    card.innerHTML = `
+      <button class="rm" title="Remove this line">&times;</button>
+      <div class="field"><input type="text" class="ltext" placeholder="e.g. @mich_magnets or (555) 123-4567" value="${L.text.replace(/"/g,'&quot;')}"></div>
+      <div class="rowfields">
+        <div class="field"><select class="lfont">${FONTS.map(f=>`<option value="${f.id.replace(/"/g,'&quot;')}">${f.label}</option>`).join('')}</select></div>
+        <div class="field"><select class="licon">${SOCIAL_ICONS.map(i=>`<option value="${i.id}">${i.label}</option>`).join('')}</select></div>
+      </div>
+      <div class="field lcustomwrap" style="display:${L.icon==='custom'?'block':'none'}"><input type="file" class="liconfile" accept="image/*"></div>
+      <div class="field"><label>Text size</label><input type="range" class="lsize" min="0.03" max="0.16" step="0.005" value="${L.size}"></div>
+      <div class="rowfields">
+        <div class="colorfield"><label>Text</label><input type="color" class="lcolor" value="${L.color}"></div>
+        <div class="colorfield"><input type="checkbox" class="lbgon" ${L.bg?'checked':''}><label>Background</label><input type="color" class="lbgcolor" value="${L.bgColor}"></div>
+      </div>
+      <div class="field"><label>Background opacity</label><input type="range" class="lbgop" min="0" max="1" step="0.05" value="${L.bgOpacity}"></div>
+      <div class="rowfields">
+        <div class="field"><label>Horizontal position</label><input type="range" class="lx" min="0" max="1" step="0.01" value="${L.x}"></div>
+        <div class="field"><label>Vertical position</label><input type="range" class="ly" min="0" max="1" step="0.01" value="${L.y}"></div>
+      </div>`;
+    card.querySelector('.lfont').value = L.font;
+    card.querySelector('.licon').value = L.icon;
+    card.querySelector('.rm').onclick = ()=>{ state.textLayers.splice(idx,1); renderAll(); };
+    card.querySelector('.ltext').oninput = e=>{ L.text=e.target.value; renderStage(); };
+    card.querySelector('.lfont').onchange = e=>{ L.font=e.target.value; renderStage(); };
+    card.querySelector('.licon').onchange = e=>{ L.icon=e.target.value; renderAll(); };
+    card.querySelector('.liconfile').onchange = e=>{
+      const file = e.target.files[0];
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = ev=>{
+        const img = new Image();
+        img.onload = ()=> renderStage();
+        img.src = ev.target.result;
+        L.customImg = img;
+      };
+      reader.readAsDataURL(file);
+    };
+    card.querySelector('.lsize').oninput = e=>{ L.size=parseFloat(e.target.value); renderStage(); };
+    card.querySelector('.lcolor').oninput = e=>{ L.color=e.target.value; renderStage(); };
+    card.querySelector('.lbgon').onchange = e=>{ L.bg=e.target.checked; renderStage(); };
+    card.querySelector('.lbgcolor').oninput = e=>{ L.bgColor=e.target.value; renderStage(); };
+    card.querySelector('.lbgop').oninput = e=>{ L.bgOpacity=parseFloat(e.target.value); renderStage(); };
+    card.querySelector('.lx').oninput = e=>{ L.x=parseFloat(e.target.value); renderStage(); };
+    card.querySelector('.ly').oninput = e=>{ L.y=parseFloat(e.target.value); renderStage(); };
+    list.appendChild(card);
+  });
+  document.getElementById('btnAddLayer').onclick = ()=>{
+    if(state.textLayers.length<5){ state.textLayers.push(newTextLayer()); renderAll(); }
+  };
+}
+
+function drawSocialIcon(ctx, L, cx, cy, r){
+  const color = L.color;
+  ctx.save();
+  ctx.translate(cx,cy);
+  if(L.icon==='instagram'){
+    ctx.strokeStyle=color; ctx.lineWidth=r*0.16;
+    roundRectPath(ctx,-r,-r,r*2,r*2,r*0.5); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0,0,r*0.5,0,7); ctx.stroke();
+    ctx.beginPath(); ctx.arc(r*0.62,-r*0.62,r*0.12,0,7); ctx.fillStyle=color; ctx.fill();
+  } else if(L.icon==='facebook'){
+    ctx.beginPath(); ctx.arc(0,0,r,0,7); ctx.fillStyle=color; ctx.fill();
+    ctx.fillStyle='#fff'; ctx.font=`700 ${r*1.3}px Georgia,serif`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('f',0,r*0.08);
+  } else if(L.icon==='tiktok'){
+    ctx.beginPath(); ctx.arc(0,0,r,0,7); ctx.fillStyle=color; ctx.fill();
+    ctx.fillStyle='#fff';
+    ctx.beginPath(); ctx.arc(-r*0.12,r*0.28,r*0.28,0,7); ctx.fill();
+    ctx.fillRect(r*0.04,-r*0.55,r*0.16,r*0.78);
+    ctx.beginPath(); ctx.arc(r*0.12,-r*0.55,r*0.16,0,7); ctx.fill();
+  } else if(L.icon==='whatsapp'){
+    ctx.beginPath(); ctx.arc(0,0,r,0,7); ctx.fillStyle=color; ctx.fill();
+    ctx.strokeStyle='#fff'; ctx.lineWidth=r*0.14; ctx.lineCap='round';
+    ctx.beginPath(); ctx.arc(0,-r*0.05,r*0.5,Math.PI*0.15,Math.PI*1.7); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(r*0.35,r*0.35); ctx.lineTo(r*0.58,r*0.55); ctx.stroke();
+  } else if(L.icon==='youtube'){
+    roundRectPath(ctx,-r,-r*0.7,r*2,r*1.4,r*0.3); ctx.fillStyle=color; ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-r*0.22,-r*0.35); ctx.lineTo(-r*0.22,r*0.35); ctx.lineTo(r*0.35,0); ctx.closePath();
+    ctx.fillStyle='#fff'; ctx.fill();
+  } else if(L.icon==='twitter'){
+    ctx.beginPath(); ctx.arc(0,0,r,0,7); ctx.fillStyle=color; ctx.fill();
+    ctx.strokeStyle='#fff'; ctx.lineWidth=r*0.16; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(-r*0.4,-r*0.4); ctx.lineTo(r*0.4,r*0.4);
+    ctx.moveTo(r*0.4,-r*0.4); ctx.lineTo(-r*0.4,r*0.4); ctx.stroke();
+  } else if(L.icon==='phone'){
+    ctx.beginPath(); ctx.arc(0,0,r,0,7); ctx.fillStyle=color; ctx.fill();
+    ctx.strokeStyle='#fff'; ctx.lineWidth=r*0.14; ctx.lineCap='round'; ctx.lineJoin='round';
+    ctx.beginPath();
+    ctx.moveTo(-r*0.35,-r*0.45);
+    ctx.quadraticCurveTo(-r*0.5,-r*0.1,-r*0.15,r*0.15);
+    ctx.quadraticCurveTo(r*0.1,r*0.4,r*0.4,r*0.35);
+    ctx.lineTo(r*0.45,r*0.55);
+    ctx.quadraticCurveTo(r*0.1,r*0.65,-r*0.2,r*0.3);
+    ctx.quadraticCurveTo(-r*0.55,-r*0.05,-r*0.45,-r*0.4);
+    ctx.closePath(); ctx.stroke();
+  } else if(L.icon==='website'){
+    ctx.strokeStyle=color; ctx.lineWidth=r*0.12;
+    ctx.beginPath(); ctx.arc(0,0,r*0.85,0,7); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(0,0,r*0.36,r*0.85,0,0,7); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-r*0.85,0); ctx.lineTo(r*0.85,0); ctx.stroke();
+  } else if(L.icon==='email'){
+    ctx.strokeStyle=color; ctx.lineWidth=r*0.12;
+    roundRectPath(ctx,-r,-r*0.65,r*2,r*1.3,r*0.15); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-r,-r*0.6); ctx.lineTo(0,r*0.1); ctx.lineTo(r,-r*0.6); ctx.stroke();
+  } else if(L.icon==='custom'){
+    if(L.customImg && L.customImg.complete && L.customImg.naturalWidth){
+      const img = L.customImg;
+      const s = Math.min((r*2)/img.width,(r*2)/img.height);
+      const dw = img.width*s, dh = img.height*s;
+      ctx.drawImage(img,-dw/2,-dh/2,dw,dh);
+    } else {
+      ctx.strokeStyle=color; ctx.lineWidth=r*0.1; ctx.setLineDash([r*0.15,r*0.1]);
+      ctx.strokeRect(-r,-r,r*2,r*2); ctx.setLineDash([]);
+    }
+  }
+  ctx.restore();
+}
+
+function drawTextLayers(ctx, size){
+  state.textLayers.forEach(L=>{
+    const hasIcon = L.icon && L.icon!=='none';
+    if(!L.text && !hasIcon) return;
+    const fs = size*L.size;
+    ctx.save();
+    ctx.font = `600 ${fs}px ${L.font}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    const padding = fs*0.45;
+    const textW = L.text ? ctx.measureText(L.text).width : 0;
+    const iconR = fs*0.55;
+    const contentW = Math.max(hasIcon ? iconR*2 : 0, textW);
+    const w = contentW + padding*2;
+    const h = hasIcon ? (iconR*2 + (L.text? fs*1.15 : 0) + padding*1.6) : fs*1.6;
+    const cx = L.x*size, cy = L.y*size;
+    const x = Math.min(Math.max(0,cx-w/2), size-w);
+    const y = Math.min(Math.max(0,cy-h/2), size-h);
+    if(L.bg){
+      ctx.globalAlpha = L.bgOpacity;
+      ctx.fillStyle = L.bgColor;
+      ctx.fillRect(x,y,w,h);
+    }
+    ctx.globalAlpha = 1;
+    const midX = x + w/2;
+    if(hasIcon){
+      drawSocialIcon(ctx, L, midX, y+padding+iconR, iconR);
+      if(L.text){
+        ctx.fillStyle = L.color;
+        ctx.fillText(L.text, midX, y+iconR*2+padding*1.3+fs*0.78);
+      }
+    } else {
+      ctx.fillStyle = L.color;
+      ctx.fillText(L.text, midX, y+h*0.72);
+    }
+    ctx.restore();
+  });
+}
+
+// ---------- small shared drawing helpers ----------
+function roundRectPath(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+function polygonPath(ctx,cx,cy,r,sides,rotation){
+  ctx.beginPath();
+  for(let i=0;i<sides;i++){
+    const ang = rotation + i*2*Math.PI/sides;
+    const px = cx+r*Math.cos(ang), py = cy+r*Math.sin(ang);
+    if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+  }
+  ctx.closePath();
+}
+function flowerAt(ctx,cx,cy,r,petalColor,centerColor){
+  for(let i=0;i<5;i++){
+    const ang = i*(2*Math.PI/5) - Math.PI/2;
+    const px = cx+Math.cos(ang)*r*0.85, py = cy+Math.sin(ang)*r*0.85;
+    ctx.save(); ctx.translate(px,py); ctx.rotate(ang);
+    ctx.beginPath(); ctx.ellipse(0,0,r*0.62,r*0.36,0,0,7);
+    ctx.fillStyle=petalColor; ctx.fill();
+    ctx.restore();
+  }
+  ctx.beginPath(); ctx.arc(cx,cy,r*0.34,0,7); ctx.fillStyle=centerColor; ctx.fill();
+}
+function heartAt(ctx,cx,cy,s,color){
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(cx, cy+s*0.75);
+  ctx.bezierCurveTo(cx-s*1.3, cy-s*0.35, cx-s*0.55, cy-s*1.35, cx, cy-s*0.5);
+  ctx.bezierCurveTo(cx+s*0.55, cy-s*1.35, cx+s*1.3, cy-s*0.35, cx, cy+s*0.75);
+  ctx.closePath();
+  ctx.fillStyle=color; ctx.fill();
+  ctx.restore();
+}
+function spriteBar(ctx,size,fillTop,fillBottom,barFrac,drawInBar){
+  const bar = size*barFrac;
+  [ [0,bar,1], [size-bar,bar,-1] ].forEach(([y0,h,dir],i)=>{
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0,y0,size,h); ctx.clip();
+    ctx.fillStyle = i===0?fillTop:fillBottom;
+    ctx.fillRect(0,y0,size,h);
+    drawInBar(y0,h);
+    ctx.restore();
+  });
+}
+function mulberry32(seed){
+  return function(){
+    seed |= 0; seed = (seed+0x6D2B79F5)|0;
+    let t = Math.imul(seed ^ seed>>>15, 1|seed);
+    t = (t + Math.imul(t ^ t>>>7, 61|t)) ^ t;
+    return ((t ^ t>>>14)>>>0) / 4294967296;
+  };
+}
+
+// ---------- frame drawing (canvas, drawn inside a clipped tile square, coords 0..size) ----------
+function drawFrame(ctx, size, frame){
+  ctx.save();
+  ctx.lineWidth = Math.max(1, size*0.012);
+  if(frame==='filmreel'){
+    const bar = size*0.09;
+    ctx.fillStyle = 'rgba(15,15,15,0.88)';
+    ctx.fillRect(0,0,size,bar);
+    ctx.fillRect(0,size-bar,size,bar);
+    ctx.fillStyle = '#fff';
+    const n = 6, r = bar*0.24;
+    for(let i=0;i<n;i++){
+      const cx = (i+0.5)*size/n;
+      ctx.beginPath(); ctx.arc(cx, bar/2, r, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx, size-bar/2, r, 0, 7); ctx.fill();
+    }
+  } else if(frame==='waves'){
+    const h = size*0.14;
+    ctx.fillStyle = 'rgba(40,110,150,0.75)';
+    ctx.beginPath(); ctx.moveTo(0,size);
+    for(let x=0;x<=size;x+=size/8){ ctx.quadraticCurveTo(x+size/16, size-h*(x/size%2===0?1.6:0.6), x+size/8, size-h); }
+    ctx.lineTo(size,size); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,0.9)'; ctx.lineWidth=size*0.012;
+    ctx.beginPath(); ctx.moveTo(0,size-h*0.75);
+    for(let x=0;x<=size;x+=size/8){ ctx.quadraticCurveTo(x+size/16, size-h*1.3, x+size/8, size-h*0.75); }
+    ctx.stroke();
+  } else if(frame==='western'){
+    ctx.strokeStyle='#8a5a2b'; ctx.lineWidth=size*0.05;
+    ctx.setLineDash([size*0.035,size*0.035]);
+    ctx.strokeRect(size*0.03,size*0.03,size*0.94,size*0.94);
+    ctx.setLineDash([]);
+  } else if(frame==='kids'){
+    const colors=['#ef6f6f','#f4b940','#4da6a0','#7a76d1','#e8618c'];
+    const r = size*0.028, gap=size*0.09;
+    let i=0;
+    for(let x=gap/2;x<size;x+=gap){ dot(x,gap*0.5); dot(x,size-gap*0.5); }
+    for(let y=gap;y<size-gap/2;y+=gap){ dot(gap*0.5,y); dot(size-gap*0.5,y); }
+    function dot(x,y){ ctx.fillStyle=colors[i++%colors.length]; ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill(); }
+  } else if(frame==='newborn'){
+    ctx.fillStyle='rgba(250,222,229,0.9)';
+    const r = size*0.045, step=size*0.09;
+    for(let x=step/2;x<size;x+=step){ scallop(x,0); scallop(x,size); }
+    function scallop(x,y){ ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill(); }
+    ctx.strokeStyle='rgba(212,175,55,0.85)'; ctx.lineWidth=size*0.01;
+    ctx.strokeRect(size*0.05,size*0.05,size*0.9,size*0.9);
+  } else if(frame==='wedding'){
+    ctx.strokeStyle='rgba(197,161,80,0.9)';
+    ctx.lineWidth=size*0.012;
+    ctx.strokeRect(size*0.05,size*0.05,size*0.9,size*0.9);
+    ctx.lineWidth=size*0.005;
+    ctx.strokeRect(size*0.08,size*0.08,size*0.84,size*0.84);
+    const L=size*0.09;
+    [[0,0],[size,0],[0,size],[size,size]].forEach(([cx,cy])=>{
+      ctx.beginPath();
+      ctx.moveTo(cx + (cx===0?L:-L), cy);
+      ctx.lineTo(cx, cy);
+      ctx.lineTo(cx, cy + (cy===0?L:-L));
+      ctx.stroke();
+    });
+  } else if(frame==='genderreveal'){
+    ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(size*0.32,0); ctx.lineTo(0,size*0.32); ctx.closePath();
+    ctx.fillStyle='rgba(120,170,230,0.85)'; ctx.fill();
+    ctx.beginPath(); ctx.moveTo(size,size); ctx.lineTo(size-size*0.32,size); ctx.lineTo(size,size-size*0.32); ctx.closePath();
+    ctx.fillStyle='rgba(235,140,175,0.85)'; ctx.fill();
+
+  } else if(frame==='clouds'){
+    ctx.fillStyle='rgba(255,255,255,0.92)';
+    ctx.strokeStyle='rgba(160,180,200,0.6)'; ctx.lineWidth=size*0.006;
+    for(let x=size*0.06;x<size;x+=size*0.16){
+      [[x,size*0.05,0.05],[x+size*0.05,size*0.035,0.065],[x+size*0.1,size*0.05,0.05]].forEach(([cx,cy,rf])=>{
+        ctx.beginPath(); ctx.arc(cx,cy,size*rf,0,7); ctx.fill(); ctx.stroke();
+      });
+    }
+  } else if(frame==='forest'){
+    const base = size*0.98;
+    ctx.fillStyle = '#3a5f3a';
+    for(let x=size*0.06;x<size;x+=size*0.15){
+      const th = size*0.055;
+      ctx.beginPath();
+      ctx.moveTo(x, base-th*2.6);
+      ctx.lineTo(x-th*0.55, base-th*1.3);
+      ctx.lineTo(x-th*0.32, base-th*1.3);
+      ctx.lineTo(x-th*0.75, base-th*0.15);
+      ctx.lineTo(x+th*0.75, base-th*0.15);
+      ctx.lineTo(x+th*0.32, base-th*1.3);
+      ctx.lineTo(x+th*0.55, base-th*1.3);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle='#5a3d24'; ctx.fillRect(x-th*0.09, base-th*0.15, th*0.18, th*0.3);
+      ctx.fillStyle = '#3a5f3a';
+    }
+    [[size*0.06,size*0.09],[size*0.94,size*0.09],[size*0.06,size*0.91],[size*0.94,size*0.91]].forEach(([cx,cy])=>{
+      ctx.save(); ctx.translate(cx,cy); ctx.rotate(-0.4);
+      ctx.beginPath(); ctx.ellipse(0,0,size*0.045,size*0.02,0,0,7);
+      ctx.fillStyle='#4f7a4a'; ctx.fill();
+      ctx.strokeStyle='#33502f'; ctx.lineWidth=size*0.003;
+      ctx.beginPath(); ctx.moveTo(-size*0.04,0); ctx.lineTo(size*0.04,0); ctx.stroke();
+      ctx.restore();
+    });
+  } else if(frame==='flowers'){
+    [[size*0.1,size*0.1],[size*0.9,size*0.1],[size*0.1,size*0.9],[size*0.9,size*0.9]].forEach(([cx,cy])=>{
+      flowerAt(ctx,cx,cy,size*0.075,'#e98bb0','#f4c95d');
+    });
+    const r = size*0.02, gap=size*0.11;
+    for(let x=gap;x<size-gap/2;x+=gap){ flowerAt(ctx,x,size*0.03,r,'#f0a8c4','#f7d97a'); flowerAt(ctx,x,size*0.97,r,'#f0a8c4','#f7d97a'); }
+  } else if(frame==='hearts'){
+    [[size*0.1,size*0.1],[size*0.9,size*0.1],[size*0.1,size*0.9],[size*0.9,size*0.9]].forEach(([cx,cy])=>{
+      heartAt(ctx,cx,cy,size*0.06,'rgba(216,70,90,0.85)');
+    });
+    const gap=size*0.1;
+    for(let x=gap;x<size-gap/2;x+=gap){ heartAt(ctx,x,size*0.045,size*0.022,'rgba(216,70,90,0.7)'); }
+  } else if(frame==='minimal-thin'){
+    ctx.strokeStyle='rgba(35,30,26,0.75)'; ctx.lineWidth=size*0.01;
+    ctx.strokeRect(size*0.045,size*0.045,size*0.91,size*0.91);
+  } else if(frame==='minimal-double'){
+    ctx.strokeStyle='rgba(35,30,26,0.7)'; ctx.lineWidth=size*0.007;
+    ctx.strokeRect(size*0.04,size*0.04,size*0.92,size*0.92);
+    ctx.strokeRect(size*0.065,size*0.065,size*0.87,size*0.87);
+  } else if(frame==='minimal-dotted'){
+    ctx.fillStyle='rgba(35,30,26,0.75)';
+    const r=size*0.008, gap=size*0.045;
+    for(let x=gap/2;x<size;x+=gap){ dot(x,size*0.03); dot(x,size*0.97); }
+    for(let y=gap;y<size-gap/2;y+=gap){ dot(size*0.03,y); dot(size*0.97,y); }
+    function dot(x,y){ ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill(); }
+  } else if(frame==='minimal-brackets'){
+    const len=size*0.15, inset=size*0.05;
+    ctx.strokeStyle='rgba(35,30,26,0.85)'; ctx.lineWidth=size*0.018; ctx.lineCap='square';
+    [0,90,180,270].forEach(deg=>{
+      ctx.save(); ctx.translate(size/2,size/2); ctx.rotate(deg*Math.PI/180); ctx.translate(-size/2,-size/2);
+      ctx.beginPath(); ctx.moveTo(inset,inset+len); ctx.lineTo(inset,inset); ctx.lineTo(inset+len,inset); ctx.stroke();
+      ctx.restore();
+    });
+  } else if(frame==='dentist'){
+    ctx.strokeStyle='rgba(70,170,150,0.85)'; ctx.lineWidth=size*0.012;
+    ctx.strokeRect(size*0.045,size*0.045,size*0.91,size*0.91);
+    const cx=size/2, cy=size*0.9, tw=size*0.11, th=size*0.13;
+    ctx.fillStyle='#fff'; ctx.strokeStyle='rgba(70,90,90,0.7)'; ctx.lineWidth=size*0.006;
+    ctx.beginPath();
+    ctx.moveTo(cx-tw*0.5, cy-th*0.55);
+    ctx.quadraticCurveTo(cx-tw*0.65, cy-th, cx-tw*0.2, cy-th*0.95);
+    ctx.quadraticCurveTo(cx, cy-th*1.1, cx+tw*0.2, cy-th*0.95);
+    ctx.quadraticCurveTo(cx+tw*0.65, cy-th, cx+tw*0.5, cy-th*0.55);
+    ctx.quadraticCurveTo(cx+tw*0.55, cy-th*0.05, cx+tw*0.22, cy+th*0.35);
+    ctx.quadraticCurveTo(cx+tw*0.1, cy+th*0.1, cx, cy-th*0.05);
+    ctx.quadraticCurveTo(cx-tw*0.1, cy+th*0.1, cx-tw*0.22, cy+th*0.35);
+    ctx.quadraticCurveTo(cx-tw*0.55, cy-th*0.05, cx-tw*0.5, cy-th*0.55);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+  } else if(frame==='medical'){
+    ctx.strokeStyle='rgba(60,110,180,0.7)'; ctx.lineWidth=size*0.012;
+    ctx.strokeRect(size*0.045,size*0.045,size*0.91,size*0.91);
+    [[size*0.12,size*0.12],[size*0.88,size*0.88]].forEach(([cx,cy])=>{
+      ctx.beginPath(); ctx.arc(cx,cy,size*0.06,0,7); ctx.fillStyle='rgba(214,60,60,0.9)'; ctx.fill();
+      ctx.fillStyle='#fff';
+      ctx.fillRect(cx-size*0.028,cy-size*0.009,size*0.056,size*0.018);
+      ctx.fillRect(cx-size*0.009,cy-size*0.028,size*0.018,size*0.056);
+    });
+  } else if(frame==='construction'){
+    const bar=size*0.1;
+    [0,size-bar].forEach(y0=>{
+      ctx.save(); ctx.beginPath(); ctx.rect(0,y0,size,bar); ctx.clip();
+      ctx.fillStyle='#1a1a1a'; ctx.fillRect(0,y0,size,bar);
+      ctx.fillStyle='#F4C430';
+      const stripeW=bar*0.9;
+      for(let x=-bar*2;x<size+bar*2;x+=stripeW*2){
+        ctx.beginPath();
+        ctx.moveTo(x,y0); ctx.lineTo(x+bar,y0);
+        ctx.lineTo(x+bar-bar*0.6,y0+bar); ctx.lineTo(x-bar*0.6,y0+bar);
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+    });
+  } else if(frame==='football'){
+    spriteBar(ctx,size,'#5c3a20','#5c3a20',0.1,(y0,h)=>{
+      ctx.strokeStyle='rgba(255,255,255,0.85)'; ctx.lineWidth=size*0.006;
+      ctx.beginPath(); ctx.moveTo(0,y0+h/2); ctx.lineTo(size,y0+h/2); ctx.stroke();
+      for(let x=size*0.08;x<size;x+=size*0.12){
+        ctx.beginPath(); ctx.moveTo(x,y0+h*0.25); ctx.lineTo(x,y0+h*0.75); ctx.stroke();
+      }
+    });
+  } else if(frame==='soccer'){
+    spriteBar(ctx,size,'#2f7a3d','#2f7a3d',0.1,(y0,h)=>{
+      let i=0;
+      for(let x=size*0.08;x<size;x+=size*0.14){
+        polygonPath(ctx,x,y0+h/2,h*0.32,5,i%2?Math.PI/2:-Math.PI/2);
+        ctx.fillStyle = i%2? '#111':'#fff'; ctx.fill(); i++;
+      }
+    });
+  } else if(frame==='baseball'){
+    spriteBar(ctx,size,'#F2E4C4','#F2E4C4',0.1,(y0,h)=>{
+      ctx.strokeStyle='#B23535'; ctx.lineWidth=size*0.007;
+      ctx.setLineDash([size*0.012,size*0.01]);
+      ctx.beginPath(); ctx.moveTo(0,y0+h*0.3); ctx.quadraticCurveTo(size*0.5,y0+h*0.95,size,y0+h*0.3); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0,y0+h*0.7); ctx.quadraticCurveTo(size*0.5,y0+h*0.05,size,y0+h*0.7); ctx.stroke();
+      ctx.setLineDash([]);
+    });
+  } else if(frame==='basketball'){
+    spriteBar(ctx,size,'#D9782B','#D9782B',0.1,(y0,h)=>{
+      ctx.strokeStyle='rgba(30,20,10,0.8)'; ctx.lineWidth=size*0.007;
+      ctx.beginPath(); ctx.moveTo(0,y0+h/2); ctx.lineTo(size,y0+h/2); ctx.stroke();
+      for(let x=size*0.1;x<size;x+=size*0.22){
+        ctx.beginPath(); ctx.arc(x,y0+h/2,h*0.45,0,Math.PI*2); ctx.stroke();
+      }
+    });
+  } else if(frame==='gold-ornate'){
+    const bandW = size*0.11;
+    const grad = ctx.createLinearGradient(0,0,size,size);
+    grad.addColorStop(0,'#f6e3a1'); grad.addColorStop(0.5,'#c9973f'); grad.addColorStop(1,'#7a5a22');
+    ctx.beginPath();
+    ctx.rect(0,0,size,size);
+    ctx.rect(bandW,bandW,size-bandW*2,size-bandW*2);
+    ctx.fillStyle = grad;
+    ctx.fill('evenodd');
+    ctx.strokeStyle='rgba(90,60,15,0.55)'; ctx.lineWidth=size*0.006;
+    const mid = bandW/2;
+    function scrollAlong(x0,y0,x1,y1,n){
+      for(let i=0;i<n;i++){
+        const t0=i/n, t1=(i+0.6)/n;
+        const ax=x0+(x1-x0)*t0, ay=y0+(y1-y0)*t0;
+        const bx=x0+(x1-x0)*t1, by=y0+(y1-y0)*t1;
+        ctx.beginPath(); ctx.moveTo(ax,ay);
+        ctx.quadraticCurveTo((ax+bx)/2+(i%2?4:-4), (ay+by)/2+(i%2?-4:4), bx,by);
+        ctx.stroke();
+      }
+    }
+    scrollAlong(bandW, mid, size-bandW, mid, 10);
+    scrollAlong(mid, bandW, mid, size-bandW, 10);
+    scrollAlong(size-mid, bandW, size-mid, size-bandW, 10);
+    scrollAlong(bandW, size-mid, size-bandW, size-mid, 10);
+    [[bandW,bandW],[size-bandW,bandW],[bandW,size-bandW],[size-bandW,size-bandW]].forEach(([cx,cy])=>{
+      ctx.save(); ctx.translate(cx,cy);
+      const g2 = ctx.createRadialGradient(0,0,0,0,0,bandW*1.4);
+      g2.addColorStop(0,'#fdf0c0'); g2.addColorStop(1,'#8a6220');
+      ctx.fillStyle=g2;
+      ctx.beginPath(); ctx.arc(0,0,bandW*0.85,0,7); ctx.fill();
+      ctx.strokeStyle='rgba(90,60,15,0.6)'; ctx.lineWidth=size*0.006;
+      ctx.beginPath(); ctx.arc(0,0,bandW*0.55,0,7); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0,0,bandW*0.3,0,7); ctx.stroke();
+      ctx.restore();
+    });
+    ctx.strokeStyle='rgba(60,40,10,0.7)'; ctx.lineWidth=size*0.008;
+    ctx.strokeRect(bandW*0.9,bandW*0.9,size-bandW*1.8,size-bandW*1.8);
+  } else if(frame==='twig-rustic'){
+    const rnd = mulberry32(42);
+    const bandInner = size*0.17;
+    const browns = ['#6b4a30','#7d5a3c','#5a3f28','#8a6644'];
+    for(let i=0;i<90;i++){
+      const edge = Math.floor(rnd()*4);
+      const pos = rnd()*size;
+      const depth = rnd()*bandInner;
+      let x,y;
+      if(edge===0){ x=pos; y=depth; } else if(edge===1){ x=size-depth; y=pos; }
+      else if(edge===2){ x=pos; y=size-depth; } else { x=depth; y=pos; }
+      const ang = rnd()*Math.PI;
+      const len = size*(0.05+rnd()*0.09);
+      ctx.strokeStyle = browns[Math.floor(rnd()*browns.length)];
+      ctx.lineWidth = size*(0.006+rnd()*0.01);
+      ctx.lineCap='round';
+      ctx.beginPath();
+      ctx.moveTo(x-Math.cos(ang)*len/2, y-Math.sin(ang)*len/2);
+      ctx.lineTo(x+Math.cos(ang)*len/2, y+Math.sin(ang)*len/2);
+      ctx.stroke();
+    }
+    function moss(cx,cy,r){
+      for(let i=0;i<10;i++){
+        const a=rnd()*Math.PI*2, d=rnd()*r;
+        ctx.beginPath();
+        ctx.arc(cx+Math.cos(a)*d, cy+Math.sin(a)*d, r*(0.25+rnd()*0.25), 0, 7);
+        ctx.fillStyle = rnd()>0.5 ? 'rgba(140,168,70,0.85)' : 'rgba(110,140,55,0.85)';
+        ctx.fill();
+      }
+    }
+    moss(size*0.86, size*0.14, size*0.09);
+    moss(size*0.12, size*0.87, size*0.07);
+    flowerAt(ctx,size*0.84,size*0.18,size*0.05,'#7bb6d9','#f4e7c1');
+    flowerAt(ctx,size*0.9,size*0.1,size*0.035,'#5f9fc7','#f4e7c1');
+    flowerAt(ctx,size*0.13,size*0.9,size*0.04,'#7bb6d9','#f4e7c1');
+  } else if(frame==='flower-wreath'){
+    const rnd = mulberry32(7);
+    const bandW = size*0.15;
+    const palette = [['#e58bab','#fbead0'],['#5fb8ab','#fbead0'],['#e3c15a','#fbead0']];
+    const n = 46, side = size-bandW, perim = 4*side;
+    for(let i=0;i<n;i++){
+      const d = (i/n)*perim;
+      let x,y;
+      if(d<side){ x=bandW/2+d; y=bandW/2; }
+      else if(d<side*2){ x=size-bandW/2; y=bandW/2+(d-side); }
+      else if(d<side*3){ x=size-bandW/2-(d-side*2); y=size-bandW/2; }
+      else { x=bandW/2; y=size-bandW/2-(d-side*3); }
+      x += (rnd()-0.5)*bandW*0.28; y += (rnd()-0.5)*bandW*0.28;
+      const r = size*(0.028+rnd()*0.03);
+      const col = palette[Math.floor(rnd()*palette.length)];
+      flowerAt(ctx,x,y,r,col[0],col[1]);
+    }
+  }
+  ctx.restore();
+}
+
+// ---------- tile drawing ----------
+function drawTile(ctx, x, y, sizePx, photo){
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x,y,sizePx,sizePx);
+  ctx.clip();
+  ctx.translate(x,y);
+  const f = FILTERS.find(f=>f.id===photo.filter);
+  ctx.filter = f ? f.css : '';
+  const img = photo.img;
+  const iw = img.width, ih = img.height;
+  const coverScale = Math.max(sizePx/iw, sizePx/ih) * photo.zoom;
+  const dw = iw*coverScale, dh = ih*coverScale;
+  const dx = (sizePx-dw)/2 + photo.offX*sizePx;
+  const dy = (sizePx-dh)/2 + photo.offY*sizePx;
+  ctx.drawImage(img, dx, dy, dw, dh);
+  ctx.filter = 'none';
+  drawFrame(ctx, sizePx, photo.frame);
+  drawTextLayers(ctx, sizePx);
+  ctx.restore();
+}
+
+// ---------- stage render ----------
+function renderSheetTabs(layout){
+  const tiles = expandedTiles();
+  const sheets = Math.max(1, Math.ceil(tiles.length / Math.max(1,layout.cap)));
+  const wrap = document.getElementById('sheetTabs');
+  wrap.innerHTML = '';
+  if(state.activeSheet > sheets-1) state.activeSheet = sheets-1;
+  for(let i=0;i<sheets;i++){
+    const b = document.createElement('div');
+    b.className = 'sheet-tab' + (i===state.activeSheet?' active':'');
+    b.textContent = 'Sheet ' + (i+1);
+    b.onclick = ()=>{ state.activeSheet=i; renderStage(); };
+    wrap.appendChild(b);
+  }
+  return sheets;
+}
+
+// Draws full-sheet guillotine guide lines through the middle of every margin/gap band.
+// Works in any unit as long as pageW/pageH/margin/gap/tileSize/cols/rows/originX/originY/unitScale share that unit.
+function drawGuideLines(ctx, {pageW, pageH, margin, gap, tileSize, cols, rows, originX, originY, unitScale}){
+  if(gap<=0 && margin<=0) return;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+  ctx.lineWidth = Math.max(1, unitScale*0.06);
+  ctx.setLineDash([]);
+  const step = tileSize + gap*unitScale;
+  const pageWpx = pageW*unitScale, pageHpx = pageH*unitScale;
+  const lastColEnd = originX + (cols-1)*step + tileSize;
+  const lastRowEnd = originY + (rows-1)*step + tileSize;
+
+  // vertical lines: left margin midline, between-column midlines, right margin midline
+  // (right/bottom use the actual leftover space to the page edge, not the nominal margin,
+  //  since column/row fitting can leave a slightly larger remainder there)
+  const vXs = [];
+  vXs.push(originX/2);
+  for(let c=1;c<cols;c++){ vXs.push(originX + c*step - (gap*unitScale)/2); }
+  vXs.push((lastColEnd + pageWpx)/2);
+  vXs.forEach(x=>{
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, pageHpx); ctx.stroke();
+  });
+
+  // horizontal lines: top margin midline, between-row midlines, bottom margin midline
+  const hYs = [];
+  hYs.push(originY/2);
+  for(let r=1;r<rows;r++){ hYs.push(originY + r*step - (gap*unitScale)/2); }
+  hYs.push((lastRowEnd + pageHpx)/2);
+  hYs.forEach(y=>{
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(pageWpx, y); ctx.stroke();
+  });
+  ctx.restore();
+}
+
+function renderStage(){
+  const layout = computeLayout(state.format, state.cutMM, state.bleedMM, state.marginMM, state.gapMM);
+  const sheets = renderSheetTabs(layout);
+  const canvas = document.getElementById('stageCanvas');
+  const scale = 3; // px per mm preview
+  const pw = layout.pw, ph = layout.ph;
+  canvas.width = pw*scale; canvas.height = ph*scale;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = '#fff'; ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  const tiles = expandedTiles();
+  if(tiles.length===0){
+    ctx.fillStyle = '#B7AE9A';
+    ctx.font = '16px -apple-system,Segoe UI,Roboto,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Add photos below to see the sheet preview', canvas.width/2, canvas.height/2);
+    state._stageMeta = null;
+    return;
+  }
+
+  const { margin, gap } = layout;
+  const startX = margin*scale, startY = margin*scale;
+  const tileSize = state.bleedMM*scale;
+  const step = (state.bleedMM+gap)*scale;
+
+  const startIdx = state.activeSheet * layout.cap;
+  const pageTiles = tiles.slice(startIdx, startIdx+layout.cap);
+  state._stageMeta = { layout, startX, startY, tileSize, step, pageTiles };
+
+  const showGuides = (state.format==='cutter' || state.format==='letter');
+  if(showGuides){
+    drawGuideLines(ctx, {
+      pageW: pw, pageH: ph, margin, gap, tileSize, cols: layout.cols, rows: layout.rows,
+      originX: startX, originY: startY, unitScale: scale
+    });
+  }
+
+  pageTiles.forEach((photo, i)=>{
+    const col = i % layout.cols, row = Math.floor(i/layout.cols);
+    const x = startX + col*step, y = startY + row*step;
+    drawTile(ctx, x, y, tileSize, photo);
+
+    // highlight selected tiles so it's clear what's active for editing
+    if(state.selectedIds.has(photo.id)){
+      ctx.save();
+      ctx.strokeStyle = '#2E6E5C'; ctx.lineWidth = Math.max(2, tileSize*0.012);
+      ctx.strokeRect(x+1, y+1, tileSize-2, tileSize-2);
+      ctx.restore();
+    }
+  });
+
+}
+
+// ---------- render orchestration ----------
+function renderAll(){
+  renderFormatCards();
+  updateCapacityPill();
+  renderFilmstrip();
+  renderEditorPanel();
+  renderTextPanel();
+  renderStage();
+}
+
+function updateCapacityPill(){
+  const layout = computeLayout(state.format, state.cutMM, state.bleedMM, state.marginMM, state.gapMM);
+  const total = totalTiles();
+  const sheets = Math.max(1, Math.ceil(total/Math.max(1,layout.cap)));
+  document.getElementById('capacityPill').innerHTML =
+    `<b>${total}</b> photo${total===1?'':'s'} selected &middot; <b>${layout.cap}</b> per sheet &middot; needs <b>${total?sheets:0}</b> sheet${sheets===1?'':'s'}`;
+}
+
+// ---------- file handling ----------
+function fileToPhoto(file){
+  return new Promise(resolve=>{
+    const reader = new FileReader();
+    reader.onload = e=>{
+      const img = new Image();
+      img.onload = ()=>{
+        resolve({
+          id: uid++, img, name:file.name, thumb:e.target.result,
+          qty:1, zoom:1, offX:0, offY:0, filter:'none', frame:'none'
+        });
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+document.getElementById('btnAdd').onclick = ()=> document.getElementById('fileAdd').click();
+document.getElementById('fileAdd').onchange = async (e)=>{
+  const files = Array.from(e.target.files);
+  const newPhotos = await Promise.all(files.map(fileToPhoto));
+  state.photos.push(...newPhotos);
+  if(state.selectedIds.size===0 && newPhotos[0]){ state.selectedIds=new Set([newPhotos[0].id]); state.primaryId=newPhotos[0].id; }
+  e.target.value = '';
+  renderAll();
+};
+document.getElementById('btnClear').onclick = ()=>{
+  if(state.photos.length && !confirm('Remove all selected photos?')) return;
+  state.photos = []; state.selectedIds.clear(); state.primaryId=null; renderAll();
+};
+document.getElementById('btnRemove').onclick = ()=>{
+  if(state.selectedIds.size) removeSelected();
+};
+document.getElementById('btnReplace').onclick = ()=>{
+  if(state.selectedIds.size!==1){ alert('Select exactly one photo to replace it.'); return; }
+  document.getElementById('fileReplace').click();
+};
+document.getElementById('fileReplace').onchange = async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const fresh = await fileToPhoto(file);
+  const targetId = state.primaryId;
+  const idx = state.photos.findIndex(p=>p.id===targetId);
+  if(idx>-1){
+    fresh.qty = state.photos[idx].qty;
+    state.photos[idx] = fresh;
+    state.selectedIds = new Set([fresh.id]);
+    state.primaryId = fresh.id;
+  }
+  e.target.value='';
+  renderAll();
+};
+
+// ---------- settings panel ----------
+document.getElementById('settingsToggle').onclick = ()=>{
+  document.getElementById('settingsPanel').classList.toggle('open');
+};
+function bindSetting(id, key, isFloat){
+  document.getElementById(id).oninput = e=>{
+    const v = isFloat ? parseFloat(e.target.value) : parseInt(e.target.value,10);
+    if(!isNaN(v)) state[key]=v;
+    renderAll();
+  };
+}
+document.getElementById('setCut').value = state.cutMM;
+document.getElementById('setBleed').value = state.bleedMM;
+document.getElementById('setMargin').value = state.marginMM;
+document.getElementById('setGap').value = state.gapMM;
+bindSetting('setCut','cutMM');
+bindSetting('setBleed','bleedMM');
+bindSetting('setMargin','marginMM');
+bindSetting('setGap','gapMM');
+
+// ---------- templates (persisted settings, not photos) ----------
+document.getElementById('btnSaveTpl').onclick = async ()=>{
+  const tpl = {
+    format:state.format, cutMM:state.cutMM, bleedMM:state.bleedMM, marginMM:state.marginMM, gapMM:state.gapMM,
+    textLayers: state.textLayers.map(L=>{
+      const {customImg, ...rest} = L;
+      return { ...rest, customImgSrc: customImg ? customImg.src : null };
+    })
+  };
+  try{
+    await window.storage.set('magnet-template', JSON.stringify(tpl), false);
+    flash('Template saved');
+  }catch(err){ flash('Could not save template'); }
+};
+document.getElementById('btnLoadTpl').onclick = async ()=>{
+  try{
+    const res = await window.storage.get('magnet-template', false);
+    if(res && res.value){
+      const tpl = JSON.parse(res.value);
+      tpl.textLayers = (tpl.textLayers||[]).map(L=>{
+        const layer = {...L, customImg:null};
+        if(layer.customImgSrc){
+          const img = new Image();
+          img.onload = ()=> renderStage();
+          img.src = layer.customImgSrc;
+          layer.customImg = img;
+        }
+        delete layer.customImgSrc;
+        return layer;
+      });
+      Object.assign(state, tpl);
+      document.getElementById('setCut').value = state.cutMM;
+      document.getElementById('setBleed').value = state.bleedMM;
+      document.getElementById('setMargin').value = state.marginMM;
+      document.getElementById('setGap').value = state.gapMM;
+      flash('Template loaded');
+      renderAll();
+    } else { flash('No saved template yet'); }
+  }catch(err){ flash('No saved template yet'); }
+};
+function flash(msg){
+  const pill = document.getElementById('capacityPill');
+  const old = pill.innerHTML;
+  pill.innerHTML = msg;
+  setTimeout(()=>{ updateCapacityPill(); }, 1400);
+}
+
+// ---------- export ----------
+document.getElementById('btnExport').onclick = ()=>{
+  const tiles = expandedTiles();
+  if(tiles.length===0){ alert('Add at least one photo first.'); return; }
+  const layout = computeLayout(state.format, state.cutMM, state.bleedMM, state.marginMM, state.gapMM);
+  const dpi = 300;
+  const pxPerMM = dpi/25.4;
+  const pw = layout.pw, ph = layout.ph;
+  const pdfFormat = layout.pageKey === 'letter' ? 'letter' : 'a4';
+
+  const pdf = new jsPDF({ orientation: layout.orientation==='landscape'?'l':'p', unit:'mm', format:pdfFormat });
+  const sheets = Math.ceil(tiles.length/layout.cap);
+  const { margin, gap } = layout;
+  const showGuides = (state.format==='cutter' || state.format==='letter');
+
+  for(let s=0; s<sheets; s++){
+    if(s>0) pdf.addPage(pdfFormat, layout.orientation==='landscape'?'l':'p');
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(pw*pxPerMM);
+    canvas.height = Math.round(ph*pxPerMM);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle='#fff'; ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    const tileSize = state.bleedMM*pxPerMM;
+    const step = (state.bleedMM+gap)*pxPerMM;
+    const startX = margin*pxPerMM, startY = margin*pxPerMM;
+    const pageTiles = tiles.slice(s*layout.cap, s*layout.cap+layout.cap);
+
+    if(showGuides){
+      drawGuideLines(ctx, {
+        pageW: pw, pageH: ph, margin, gap, tileSize, cols: layout.cols, rows: layout.rows,
+        originX: startX, originY: startY, unitScale: pxPerMM
+      });
+    }
+
+    pageTiles.forEach((photo,i)=>{
+      const col = i%layout.cols, row = Math.floor(i/layout.cols);
+      const x = startX+col*step, y = startY+row*step;
+      drawTile(ctx, x, y, tileSize, photo);
+    });
+
+    const imgData = canvas.toDataURL('image/jpeg',0.95);
+    pdf.addImage(imgData,'JPEG',0,0,pw,ph);
+  }
+  pdf.save('magnet-sheet.pdf');
+};
+
+// ---------- direct manipulation on the sheet preview ----------
+// Click a tile to select it (Shift+click adds to a multi-selection).
+// Drag a tile to pan its photo; scroll over a tile to zoom it — no selection needed for either.
+(function setupStageInteraction(){
+  const canvas = document.getElementById('stageCanvas');
+  let drag = null; // {photo, lastX, lastY, downX, downY, moved, shift}
+
+  function pointFromEvent(e){
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: (e.clientX-rect.left) * (canvas.width/rect.width),
+      y: (e.clientY-rect.top) * (canvas.height/rect.height)
+    };
+  }
+  function hitTest(px, py){
+    const m = state._stageMeta;
+    if(!m || !m.pageTiles.length) return null;
+    const col = Math.floor((px-m.startX)/m.step);
+    const row = Math.floor((py-m.startY)/m.step);
+    if(col<0 || row<0 || col>=m.layout.cols) return null;
+    const localX = px - m.startX - col*m.step;
+    const localY = py - m.startY - row*m.step;
+    if(localX<0 || localX>m.tileSize || localY<0 || localY>m.tileSize) return null;
+    const idx = row*m.layout.cols + col;
+    if(idx<0 || idx>=m.pageTiles.length) return null;
+    return m.pageTiles[idx];
+  }
+
+  canvas.addEventListener('mousedown', e=>{
+    const pt = pointFromEvent(e);
+    const photo = hitTest(pt.x, pt.y);
+    if(!photo) return;
+    drag = { photo, lastX:pt.x, lastY:pt.y, downX:pt.x, downY:pt.y, moved:false, shift:e.shiftKey };
+  });
+
+  window.addEventListener('mousemove', e=>{
+    if(!drag){
+      if(e.target===canvas){
+        const pt = pointFromEvent(e);
+        canvas.style.cursor = hitTest(pt.x,pt.y) ? 'grab' : 'default';
+      }
+      return;
+    }
+    const pt = pointFromEvent(e);
+    if(Math.abs(pt.x-drag.downX)>3 || Math.abs(pt.y-drag.downY)>3) drag.moved = true;
+    if(drag.moved){
+      const m = state._stageMeta;
+      const dx = pt.x-drag.lastX, dy = pt.y-drag.lastY;
+      drag.photo.offX = Math.max(-1, Math.min(1, drag.photo.offX + dx/m.tileSize));
+      drag.photo.offY = Math.max(-1, Math.min(1, drag.photo.offY + dy/m.tileSize));
+      drag.lastX = pt.x; drag.lastY = pt.y;
+      canvas.style.cursor = 'grabbing';
+      renderStage();
+      if(primaryPhoto()===drag.photo) renderEditorPanel();
+    }
+  });
+
+  window.addEventListener('mouseup', ()=>{
+    if(!drag) return;
+    if(!drag.moved){
+      if(drag.shift){ state.selectedIds.add(drag.photo.id); state.primaryId = drag.photo.id; }
+      else { state.selectedIds = new Set([drag.photo.id]); state.primaryId = drag.photo.id; }
+      renderAll();
+    }
+    drag = null;
+  });
+
+  canvas.addEventListener('wheel', e=>{
+    const pt = pointFromEvent(e);
+    const photo = hitTest(pt.x, pt.y);
+    if(!photo) return;
+    e.preventDefault();
+    photo.zoom = Math.max(1, Math.min(2.5, photo.zoom + (e.deltaY<0 ? 0.06 : -0.06)));
+    renderStage();
+    if(primaryPhoto()===photo) renderEditorPanel();
+  }, { passive:false });
+})();
+
+// ---------- init ----------
+renderAll();
+</script>
+</body>
+</html>
