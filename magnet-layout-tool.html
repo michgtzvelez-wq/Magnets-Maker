@@ -39,7 +39,9 @@
   }
   .masthead .sub{color:var(--ink-soft);font-size:13px;}
 
-  .formats{display:flex;gap:14px;margin-bottom:16px;flex-wrap:wrap;}
+  .formats{margin-bottom:14px;}
+  .format-filter{max-width:520px;}
+  .format-info{font-size:12px;color:var(--ink-soft);margin:6px 2px 0;}
   .format-card{
     flex:1;min-width:230px;
     background:var(--card);
@@ -173,6 +175,32 @@
   .settings-panel{display:none;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);}
   .settings-panel.open{display:block;}
   footer.hint{margin-top:18px;font-size:12px;color:var(--ink-soft);text-align:center;}
+
+  /* ---- photo popup modal ---- */
+  .photo-modal{
+    position:fixed;inset:0;background:rgba(20,18,14,.93);z-index:1000;
+    display:none;flex-direction:column;align-items:center;justify-content:center;
+    padding:20px;gap:12px;touch-action:none;overscroll-behavior:contain;
+  }
+  .photo-modal.open{display:flex;}
+  .pm-close{
+    position:absolute;top:16px;right:16px;width:38px;height:38px;border-radius:50%;
+    border:none;background:rgba(255,255,255,.15);color:#fff;font-size:22px;line-height:1;cursor:pointer;
+  }
+  .pm-close:hover{background:rgba(255,255,255,.3);}
+  .pm-stage{display:flex;align-items:center;gap:8px;max-width:100%;}
+  .pm-nav{
+    width:44px;height:44px;border-radius:50%;border:none;flex:0 0 auto;
+    background:rgba(255,255,255,.15);color:#fff;font-size:24px;cursor:pointer;
+  }
+  .pm-nav:hover{background:rgba(255,255,255,.3);}
+  .pm-nav:disabled{opacity:.25;cursor:default;}
+  .pm-canvas-wrap{width:min(76vw,60vh);max-width:520px;aspect-ratio:1/1;touch-action:none;}
+  #pmCanvas{width:100%;height:100%;display:block;border-radius:10px;box-shadow:0 4px 24px rgba(0,0,0,.45);touch-action:none;background:#fff;}
+  .pm-info{color:#EFE9DC;font-size:13px;text-align:center;}
+  .pm-hint{color:#B7AE9A;font-size:12px;text-align:center;}
+  .photo-modal .btn{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.28);color:#fff;}
+  .photo-modal .btn:hover{background:rgba(255,255,255,.22);border-color:rgba(255,255,255,.45);color:#fff;}
 </style>
 </head>
 <body>
@@ -236,11 +264,23 @@
   <footer class="hint">Everything renders in your browser. Export builds a multi-page PDF sized to A4, ready to send straight to the ET-2903.</footer>
 </div>
 
+<div class="photo-modal" id="photoModal">
+  <button class="pm-close" id="pmClose" title="Close">&times;</button>
+  <div class="pm-stage">
+    <button class="pm-nav" id="pmPrev" title="Previous photo">&lsaquo;</button>
+    <div class="pm-canvas-wrap"><canvas id="pmCanvas" width="800" height="800"></canvas></div>
+    <button class="pm-nav" id="pmNext" title="Next photo">&rsaquo;</button>
+  </div>
+  <div class="pm-info" id="pmInfo"></div>
+  <div class="pm-hint">Drag to move the photo &middot; pinch or scroll to resize</div>
+  <button class="btn" id="pmReset">Reset position</button>
+</div>
+
 <script>
 const { jsPDF } = window.jspdf;
 
 const state = {
-  format: 'cutter',
+  format: 'letter',
   cutMM: 50,
   bleedMM: 56,
   marginMM: 6,
@@ -250,7 +290,9 @@ const state = {
   primaryId: null,         // whose values populate the sliders
   activeSheet: 0,
   textLayers: [],          // {id,text,font,size,color,bg,bgColor,bgOpacity,x,y}
-  editorTab: 'photo'
+  editorTab: 'photo',
+  modalIndex: null,
+  showAdvancedEditing: false
 };
 
 const FONTS = [
@@ -339,28 +381,23 @@ function expandedTiles(){
   return arr;
 }
 
-// ---------- format cards ----------
+// ---------- format filter ----------
 function renderFormatCards(){
-  const cutterLayout = computeLayout('cutter', state.cutMM, state.bleedMM, state.marginMM, state.gapMM);
-  const guillotineLayout = computeLayout('guillotine', state.cutMM, state.bleedMM, state.marginMM, state.gapMM);
-  const letterLayout = computeLayout('letter', state.cutMM, state.bleedMM, state.marginMM, state.gapMM);
+  const options = [
+    {key:'letter', label:'8.5\u2033\u00d711\u2033 (default)', desc:'US Letter sheet, fixed 10mm margins &amp; gaps, guide lines included.'},
+    {key:'cutter', label:'A4 &ndash; Cutter', desc:'A4 sheet with your own margin/gap spacing, for a die-cut punch.'},
+    {key:'guillotine', label:'A4 &ndash; Guillotine', desc:'A4 sheet, tiles packed edge to edge with no gaps.'}
+  ];
+  const layout = computeLayout(state.format, state.cutMM, state.bleedMM, state.marginMM, state.gapMM);
+  const active = options.find(o=>o.key===state.format) || options[0];
   const el = document.getElementById('formatCards');
-  el.innerHTML = '';
-  [
-    {key:'cutter', title:'Cutter only (A4)', layout:cutterLayout, desc:'Extra spacing between tiles so the die-cut punch has room to align each square.'},
-    {key:'guillotine', title:'Guillotine only (A4)', layout:guillotineLayout, desc:'Tiles packed edge to edge, no borders drawn &mdash; more magnets per sheet.'},
-    {key:'letter', title:'Cutter (Letter 8.5\u2033\u00d711\u2033)', layout:letterLayout, desc:'Same magnet size, fixed 10mm margins and gaps on a US Letter sheet, with guillotine guide lines through the middle of every gap.'}
-  ].forEach(f=>{
-    const card = document.createElement('div');
-    card.className = 'format-card' + (state.format===f.key ? ' active':'');
-    card.innerHTML = `
-      <div class="check"></div>
-      <div class="kicker">${f.layout.orientation}</div>
-      <h3>${f.title}</h3>
-      <div class="count">${f.layout.cap} per sheet</div>
-      <div class="desc">${f.desc}</div>`;
-    card.onclick = ()=>{ state.format = f.key; state.activeSheet = 0; renderAll(); };
-    el.appendChild(card);
+  el.innerHTML = `
+    <div class="segmented format-filter">
+      ${options.map(o=>`<button data-f="${o.key}" class="${state.format===o.key?'active':''}">${o.label}</button>`).join('')}
+    </div>
+    <div class="format-info">${layout.orientation} &middot; <b>${layout.cap}</b> per sheet &middot; ${active.desc}</div>`;
+  el.querySelectorAll('button').forEach(b=>{
+    b.onclick = ()=>{ state.format = b.dataset.f; state.activeSheet = 0; renderAll(); };
   });
 }
 
@@ -387,7 +424,7 @@ function renderFilmstrip(){
       else { state.selectedIds.delete(p.id); if(state.primaryId===p.id) state.primaryId = selectedPhotos()[0]?.id ?? null; }
       renderAll();
     };
-    card.querySelector('img').onclick = ()=>{ state.selectedIds = new Set([p.id]); state.primaryId=p.id; renderAll(); };
+    card.querySelector('img').onclick = ()=>{ openPhotoModal(p.id); };
     card.querySelector('.rm').onclick = (e)=>{ e.stopPropagation(); removePhoto(p.id); };
     card.querySelector('.inc').onclick = (e)=>{ e.stopPropagation(); p.qty=Math.min(200,p.qty+1); renderAll(); };
     card.querySelector('.dec').onclick = (e)=>{ e.stopPropagation(); p.qty=Math.max(1,p.qty-1); renderAll(); };
@@ -438,11 +475,16 @@ function renderEditorPanel(){
     <h4>Editing ${n} photo${n===1?'':'s'}</h4>
     <div class="segmented" id="editorTabs">
       <button data-tab="photo">Photo</button>
-      <button data-tab="filters">Filters</button>
-      <button data-tab="frames">Frames</button>
+      ${state.showAdvancedEditing ? `<button data-tab="filters">Filters</button><button data-tab="frames">Frames</button>` : ''}
     </div>
     <div id="editorBody"></div>
+    <div class="settings-toggle" id="advToggle" style="margin-top:10px;">${state.showAdvancedEditing ? 'Hide frame &amp; filter options' : 'Frame &amp; filter options'}</div>
   `;
+  document.getElementById('advToggle').onclick = ()=>{
+    state.showAdvancedEditing = !state.showAdvancedEditing;
+    if(!state.showAdvancedEditing) state.editorTab = 'photo';
+    renderEditorPanel();
+  };
   el.querySelectorAll('#editorTabs button').forEach(b=>{
     if(b.dataset.tab===state.editorTab) b.classList.add('active');
     b.onclick = ()=>{ state.editorTab=b.dataset.tab; renderAll(); };
@@ -450,8 +492,10 @@ function renderEditorPanel(){
   const body = document.getElementById('editorBody');
   if(state.editorTab==='photo'){
     body.innerHTML = `
-      <div class="field"><label>Zoom (<span id="zoomVal">${p.zoom.toFixed(2)}</span>x)</label>
-        <input type="range" id="zoomRange" min="1" max="2.5" step="0.02" value="${p.zoom}"></div>
+      <div class="field"><label>Photo size (<span id="zoomVal">${p.zoom.toFixed(2)}</span>x)</label>
+        <input type="range" id="zoomRange" min="0.4" max="2.5" step="0.02" value="${p.zoom}"></div>
+      ${p.zoom < 1 ? `<div class="field"><label>Background color (shows around shrunk photo)</label>
+        <input type="color" id="bgColorInput" value="${p.bgColor||'#ffffff'}" style="width:100%;height:34px;"></div>` : ''}
       <div class="field"><label>Move horizontally</label>
         <input type="range" id="offXRange" min="-0.5" max="0.5" step="0.01" value="${p.offX}"></div>
       <div class="field"><label>Move vertically</label>
@@ -460,7 +504,11 @@ function renderEditorPanel(){
     document.getElementById('zoomRange').oninput = e=>{
       const v=parseFloat(e.target.value); group.forEach(ph=>ph.zoom=v);
       document.getElementById('zoomVal').textContent = v.toFixed(2); renderStage();
+      const wasShown = !!document.getElementById('bgColorInput');
+      if((v<1)!==wasShown) renderEditorPanel();
     };
+    const bgInput = document.getElementById('bgColorInput');
+    if(bgInput) bgInput.oninput = e=>{ group.forEach(ph=>ph.bgColor=e.target.value); renderStage(); };
     document.getElementById('offXRange').oninput = e=>{ const v=parseFloat(e.target.value); group.forEach(ph=>ph.offX=v); renderStage(); };
     document.getElementById('offYRange').oninput = e=>{ const v=parseFloat(e.target.value); group.forEach(ph=>ph.offY=v); renderStage(); };
     document.getElementById('btnResetCrop').onclick = ()=>{ group.forEach(ph=>{ph.zoom=1;ph.offX=0;ph.offY=0;}); renderAll(); };
@@ -1035,6 +1083,12 @@ function drawTile(ctx, x, y, sizePx, photo){
   const dw = iw*coverScale, dh = ih*coverScale;
   const dx = (sizePx-dw)/2 + photo.offX*sizePx;
   const dy = (sizePx-dh)/2 + photo.offY*sizePx;
+  if(photo.zoom < 1){
+    ctx.filter = 'none';
+    ctx.fillStyle = photo.bgColor || '#ffffff';
+    ctx.fillRect(0,0,sizePx,sizePx);
+    ctx.filter = f ? f.css : '';
+  }
   ctx.drawImage(img, dx, dy, dw, dh);
   ctx.filter = 'none';
   drawFrame(ctx, sizePx, photo.frame);
@@ -1175,7 +1229,7 @@ function fileToPhoto(file){
       img.onload = ()=>{
         resolve({
           id: uid++, img, name:file.name, thumb:e.target.result,
-          qty:1, zoom:1, offX:0, offY:0, filter:'none', frame:'none'
+          qty:1, zoom:1, offX:0, offY:0, filter:'none', frame:'none', bgColor:'#ffffff'
         });
       };
       img.src = e.target.result;
@@ -1406,9 +1460,123 @@ document.getElementById('btnExport').onclick = ()=>{
     const photo = hitTest(pt.x, pt.y);
     if(!photo) return;
     e.preventDefault();
-    photo.zoom = Math.max(1, Math.min(2.5, photo.zoom + (e.deltaY<0 ? 0.06 : -0.06)));
+    photo.zoom = Math.max(0.4, Math.min(2.5, photo.zoom + (e.deltaY<0 ? 0.06 : -0.06)));
     renderStage();
     if(primaryPhoto()===photo) renderEditorPanel();
+  }, { passive:false });
+})();
+
+// ---------- photo popup modal ----------
+function modalPhoto(){
+  if(state.modalIndex===null) return null;
+  return state.photos[state.modalIndex] || null;
+}
+function openPhotoModal(id){
+  const idx = state.photos.findIndex(p=>p.id===id);
+  if(idx===-1) return;
+  state.modalIndex = idx;
+  state.selectedIds = new Set([id]);
+  state.primaryId = id;
+  document.getElementById('photoModal').classList.add('open');
+  renderModal();
+}
+function closePhotoModal(){
+  document.getElementById('photoModal').classList.remove('open');
+  state.modalIndex = null;
+  renderAll();
+}
+function stepModal(dir){
+  if(state.modalIndex===null || state.photos.length===0) return;
+  state.modalIndex = (state.modalIndex + dir + state.photos.length) % state.photos.length;
+  const p = modalPhoto();
+  state.selectedIds = new Set([p.id]);
+  state.primaryId = p.id;
+  renderModal();
+}
+function renderModal(){
+  const photo = modalPhoto();
+  const canvas = document.getElementById('pmCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  if(!photo){ document.getElementById('pmInfo').textContent=''; return; }
+  drawTile(ctx, 0, 0, canvas.width, photo);
+  document.getElementById('pmInfo').textContent = `${state.modalIndex+1} / ${state.photos.length} \u2014 ${photo.name}`;
+  document.getElementById('pmPrev').disabled = state.photos.length<2;
+  document.getElementById('pmNext').disabled = state.photos.length<2;
+}
+document.getElementById('pmClose').onclick = closePhotoModal;
+document.getElementById('pmPrev').onclick = ()=> stepModal(-1);
+document.getElementById('pmNext').onclick = ()=> stepModal(1);
+document.getElementById('pmReset').onclick = ()=>{
+  const p = modalPhoto(); if(!p) return;
+  p.zoom=1; p.offX=0; p.offY=0;
+  renderModal();
+};
+document.getElementById('photoModal').addEventListener('click', e=>{
+  if(e.target.id==='photoModal') closePhotoModal();
+});
+
+(function setupModalInteraction(){
+  const canvas = document.getElementById('pmCanvas');
+  const pointers = new Map();
+  let dragStart = null, pinchStartDist = null, pinchStartZoom = null;
+  function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
+
+  canvas.addEventListener('pointerdown', e=>{
+    const photo = modalPhoto(); if(!photo) return;
+    canvas.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if(pointers.size===1){
+      dragStart = {x:e.clientX, y:e.clientY, offX:photo.offX, offY:photo.offY};
+    } else if(pointers.size===2){
+      const pts = [...pointers.values()];
+      pinchStartDist = dist(pts[0],pts[1]);
+      pinchStartZoom = photo.zoom;
+      dragStart = null;
+    }
+  });
+
+  canvas.addEventListener('pointermove', e=>{
+    if(!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    const photo = modalPhoto(); if(!photo) return;
+    if(pointers.size===2 && pinchStartDist){
+      const pts = [...pointers.values()];
+      const d = dist(pts[0],pts[1]);
+      photo.zoom = Math.max(0.4, Math.min(2.5, pinchStartZoom * (d/pinchStartDist)));
+      renderModal();
+    } else if(pointers.size===1 && dragStart){
+      const rect = canvas.getBoundingClientRect();
+      const dx = (e.clientX-dragStart.x)/rect.width;
+      const dy = (e.clientY-dragStart.y)/rect.height;
+      photo.offX = Math.max(-0.5, Math.min(0.5, dragStart.offX + dx));
+      photo.offY = Math.max(-0.5, Math.min(0.5, dragStart.offY + dy));
+      renderModal();
+    }
+  });
+
+  function endPointer(e){
+    pointers.delete(e.pointerId);
+    const photo = modalPhoto();
+    if(pointers.size===1 && photo){
+      const pt = [...pointers.values()][0];
+      dragStart = {x:pt.x, y:pt.y, offX:photo.offX, offY:photo.offY};
+    } else {
+      dragStart = null;
+    }
+    if(pointers.size<2) pinchStartDist = null;
+    // sync the main stage / filmstrip / side panel with whatever changed in the popup
+    renderStage(); renderFilmstrip();
+    if(photo && primaryPhoto()===photo) renderEditorPanel();
+  }
+  canvas.addEventListener('pointerup', endPointer);
+  canvas.addEventListener('pointercancel', endPointer);
+
+  canvas.addEventListener('wheel', e=>{
+    const photo = modalPhoto(); if(!photo) return;
+    e.preventDefault();
+    photo.zoom = Math.max(0.4, Math.min(2.5, photo.zoom + (e.deltaY<0 ? 0.06 : -0.06)));
+    renderModal();
   }, { passive:false });
 })();
 
