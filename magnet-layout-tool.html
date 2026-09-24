@@ -209,12 +209,13 @@
   <div class="masthead">
     <div>
       <h1>Button Magnet Sheet Builder</h1>
-      <div class="sub">50&times;50mm photo magnets &middot; A4 or Letter &middot; Epson ET-2903</div>
+      <div class="sub">Square or round photo magnets &middot; A4 or Letter &middot; Epson ET-2903</div>
     </div>
     <div class="settings-toggle" id="settingsToggle">Sheet settings</div>
   </div>
 
   <div class="formats" id="formatCards"></div>
+  <div class="formats" id="sizeCards"></div>
 
   <div class="settings-panel" id="settingsPanel">
     <div class="stage-card" style="margin-bottom:16px;">
@@ -281,10 +282,12 @@ const { jsPDF } = window.jspdf;
 
 const state = {
   format: 'letter',
-  cutMM: 50,
-  bleedMM: 56,
-  marginMM: 6,
-  gapMM: 9,
+  shape: 'square',   // 'square' or 'round' — round uses cutMM as the button diameter
+  cutMM: 48,
+  bleedMM: 54,
+  marginMM: 10,
+  gapMM: 13,
+  safeMarginMM: 2,   // blank inset kept between the photo and the outer print edge, so nothing important folds to the back
   photos: [],              // {id,img,name,qty,zoom,offX,offY,filter,frame}
   selectedIds: new Set(),  // photos currently being edited together
   primaryId: null,         // whose values populate the sliders
@@ -294,6 +297,14 @@ const state = {
   modalIndex: null,
   showAdvancedEditing: false
 };
+
+const MAGNET_SIZES = [
+  {key:'square',   shape:'square', cutMM:48, bleedMM:54, gapMM:13, safeMarginMM:2, label:'Square 48\u00d748mm'},
+  {key:'round25',  shape:'round',  cutMM:25, bleedMM:31, gapMM:4,  safeMarginMM:2, label:'Round 25mm'},
+  {key:'round32',  shape:'round',  cutMM:32, bleedMM:38, gapMM:4,  safeMarginMM:2, label:'Round 32mm'},
+  {key:'round58',  shape:'round',  cutMM:58, bleedMM:64, gapMM:4,  safeMarginMM:2, label:'Round 58mm'},
+  {key:'custom',   shape:null,     cutMM:null, bleedMM:null, gapMM:null, safeMarginMM:null, label:'Custom'}
+];
 
 const FONTS = [
   {id:"'Helvetica Neue',Arial,sans-serif", label:'Sans'},
@@ -347,19 +358,17 @@ const FRAMES = [
 let uid = 1;
 
 // ---------- layout math ----------
-// Page sizes in mm. Letter uses fixed 10mm margin/gap regardless of the shared cutter settings.
+// Page sizes in mm. Paper format only picks the sheet size now — spacing (margin/gap)
+// always comes from the magnet type (state.marginMM / state.gapMM).
 const PAGE_SIZES = {
-  a4: { w:210, h:297 },
-  letter: { w:215.9, h:279.4 }
+  letter:  { w:215.9, h:279.4 },
+  a4:      { w:210,   h:297 },
+  legal:   { w:215.9, h:355.6 },
+  tabloid: { w:279.4, h:431.8 }
 };
-function formatSpacing(format, marginMM, gapMM){
-  if(format === 'letter') return { margin:10, gap:10 };
-  if(format === 'cutter') return { margin:marginMM, gap:gapMM };
-  return { margin:marginMM, gap:0 };
-}
 function computeLayout(format, cutMM, bleedMM, marginMM, gapMM){
-  const { margin, gap } = formatSpacing(format, marginMM, gapMM);
-  const pageKey = format === 'letter' ? 'letter' : 'a4';
+  const margin = marginMM, gap = gapMM;
+  const pageKey = PAGE_SIZES[format] ? format : 'letter';
   const size = PAGE_SIZES[pageKey];
   function fit(pw, ph){
     const usableW = pw - 2*margin, usableH = ph - 2*margin;
@@ -381,23 +390,47 @@ function expandedTiles(){
   return arr;
 }
 
-// ---------- format filter ----------
+// ---------- paper size filter ----------
 function renderFormatCards(){
   const options = [
-    {key:'letter', label:'8.5\u2033\u00d711\u2033 (default)', desc:'US Letter sheet, fixed 10mm margins &amp; gaps, guide lines included.'},
-    {key:'cutter', label:'A4 &ndash; Cutter', desc:'A4 sheet with your own margin/gap spacing, for a die-cut punch.'},
-    {key:'guillotine', label:'A4 &ndash; Guillotine', desc:'A4 sheet, tiles packed edge to edge with no gaps.'}
+    {key:'letter', label:'8.5\u2033\u00d711\u2033 (default)'},
+    {key:'a4', label:'A4'},
+    {key:'legal', label:'8.5\u2033\u00d714\u2033 Legal'},
+    {key:'tabloid', label:'11\u2033\u00d717\u2033 Tabloid'}
   ];
   const layout = computeLayout(state.format, state.cutMM, state.bleedMM, state.marginMM, state.gapMM);
-  const active = options.find(o=>o.key===state.format) || options[0];
   const el = document.getElementById('formatCards');
   el.innerHTML = `
     <div class="segmented format-filter">
       ${options.map(o=>`<button data-f="${o.key}" class="${state.format===o.key?'active':''}">${o.label}</button>`).join('')}
     </div>
-    <div class="format-info">${layout.orientation} &middot; <b>${layout.cap}</b> per sheet &middot; ${active.desc}</div>`;
+    <div class="format-info">${layout.orientation} &middot; <b>${layout.cap}</b> per sheet</div>`;
   el.querySelectorAll('button').forEach(b=>{
     b.onclick = ()=>{ state.format = b.dataset.f; state.activeSheet = 0; renderAll(); };
+  });
+}
+
+// ---------- magnet size filter ----------
+function renderSizeCards(){
+  const el = document.getElementById('sizeCards');
+  const activeKey = MAGNET_SIZES.find(s=>s.shape===state.shape && s.cutMM===state.cutMM)?.key || 'custom';
+  el.innerHTML = `
+    <div class="segmented format-filter">
+      ${MAGNET_SIZES.map(s=>`<button data-s="${s.key}" class="${activeKey===s.key?'active':''}">${s.label}</button>`).join('')}
+    </div>
+    <div class="format-info">${state.shape==='round' ? 'Round button magnets' : 'Square photo magnets'} &middot; ${state.cutMM}mm ${state.shape==='round'?'diameter':'cut size'} &middot; ${state.gapMM}mm gap &middot; ${state.bleedMM}mm printed image &middot; ${state.safeMarginMM}mm safe edge</div>`;
+  el.querySelectorAll('button').forEach(b=>{
+    b.onclick = ()=>{
+      const s = MAGNET_SIZES.find(m=>m.key===b.dataset.s);
+      if(s.shape){
+        state.shape = s.shape; state.cutMM = s.cutMM; state.bleedMM = s.bleedMM;
+        state.gapMM = s.gapMM; state.safeMarginMM = s.safeMarginMM;
+      } else {
+        state.shape = 'square';
+      }
+      state.activeSheet = 0;
+      renderAll();
+    };
   });
 }
 
@@ -1072,23 +1105,27 @@ function drawFrame(ctx, size, frame){
 function drawTile(ctx, x, y, sizePx, photo){
   ctx.save();
   ctx.beginPath();
-  ctx.rect(x,y,sizePx,sizePx);
+  if(state.shape==='round'){
+    ctx.arc(x+sizePx/2, y+sizePx/2, sizePx/2, 0, Math.PI*2);
+  } else {
+    ctx.rect(x,y,sizePx,sizePx);
+  }
   ctx.clip();
   ctx.translate(x,y);
   const f = FILTERS.find(f=>f.id===photo.filter);
+  // Always paint the background first — the safe-margin ring (and any extra
+  // shrink from photo.zoom<1) shows this color instead of photo content.
+  ctx.fillStyle = photo.bgColor || '#ffffff';
+  ctx.fillRect(0,0,sizePx,sizePx);
   ctx.filter = f ? f.css : '';
   const img = photo.img;
   const iw = img.width, ih = img.height;
-  const coverScale = Math.max(sizePx/iw, sizePx/ih) * photo.zoom;
+  const marginPx = state.bleedMM>0 ? sizePx * (state.safeMarginMM/state.bleedMM) : 0;
+  const innerSize = Math.max(1, sizePx - 2*marginPx);
+  const coverScale = Math.max(innerSize/iw, innerSize/ih) * photo.zoom;
   const dw = iw*coverScale, dh = ih*coverScale;
-  const dx = (sizePx-dw)/2 + photo.offX*sizePx;
-  const dy = (sizePx-dh)/2 + photo.offY*sizePx;
-  if(photo.zoom < 1){
-    ctx.filter = 'none';
-    ctx.fillStyle = photo.bgColor || '#ffffff';
-    ctx.fillRect(0,0,sizePx,sizePx);
-    ctx.filter = f ? f.css : '';
-  }
+  const dx = marginPx + (innerSize-dw)/2 + photo.offX*sizePx;
+  const dy = marginPx + (innerSize-dh)/2 + photo.offY*sizePx;
   ctx.drawImage(img, dx, dy, dw, dh);
   ctx.filter = 'none';
   drawFrame(ctx, sizePx, photo.frame);
@@ -1178,8 +1215,7 @@ function renderStage(){
   const pageTiles = tiles.slice(startIdx, startIdx+layout.cap);
   state._stageMeta = { layout, startX, startY, tileSize, step, pageTiles };
 
-  const showGuides = (state.format==='cutter' || state.format==='letter');
-  if(showGuides){
+  if(true){ // guide lines always shown now (cutter/guillotine distinction removed)
     drawGuideLines(ctx, {
       pageW: pw, pageH: ph, margin, gap, tileSize, cols: layout.cols, rows: layout.rows,
       originX: startX, originY: startY, unitScale: scale
@@ -1195,7 +1231,13 @@ function renderStage(){
     if(state.selectedIds.has(photo.id)){
       ctx.save();
       ctx.strokeStyle = '#2E6E5C'; ctx.lineWidth = Math.max(2, tileSize*0.012);
-      ctx.strokeRect(x+1, y+1, tileSize-2, tileSize-2);
+      if(state.shape==='round'){
+        ctx.beginPath();
+        ctx.arc(x+tileSize/2, y+tileSize/2, tileSize/2-1, 0, Math.PI*2);
+        ctx.stroke();
+      } else {
+        ctx.strokeRect(x+1, y+1, tileSize-2, tileSize-2);
+      }
       ctx.restore();
     }
   });
@@ -1205,6 +1247,7 @@ function renderStage(){
 // ---------- render orchestration ----------
 function renderAll(){
   renderFormatCards();
+  renderSizeCards();
   updateCapacityPill();
   renderFilmstrip();
   renderEditorPanel();
@@ -1297,7 +1340,8 @@ bindSetting('setGap','gapMM');
 // ---------- templates (persisted settings, not photos) ----------
 document.getElementById('btnSaveTpl').onclick = async ()=>{
   const tpl = {
-    format:state.format, cutMM:state.cutMM, bleedMM:state.bleedMM, marginMM:state.marginMM, gapMM:state.gapMM,
+    format:state.format, shape:state.shape, cutMM:state.cutMM, bleedMM:state.bleedMM,
+    marginMM:state.marginMM, gapMM:state.gapMM, safeMarginMM:state.safeMarginMM,
     textLayers: state.textLayers.map(L=>{
       const {customImg, ...rest} = L;
       return { ...rest, customImgSrc: customImg ? customImg.src : null };
@@ -1349,12 +1393,11 @@ document.getElementById('btnExport').onclick = ()=>{
   const dpi = 300;
   const pxPerMM = dpi/25.4;
   const pw = layout.pw, ph = layout.ph;
-  const pdfFormat = layout.pageKey === 'letter' ? 'letter' : 'a4';
+  const pdfFormat = ['letter','a4','legal','tabloid'].includes(layout.pageKey) ? layout.pageKey : 'letter';
 
   const pdf = new jsPDF({ orientation: layout.orientation==='landscape'?'l':'p', unit:'mm', format:pdfFormat });
   const sheets = Math.ceil(tiles.length/layout.cap);
   const { margin, gap } = layout;
-  const showGuides = (state.format==='cutter' || state.format==='letter');
 
   for(let s=0; s<sheets; s++){
     if(s>0) pdf.addPage(pdfFormat, layout.orientation==='landscape'?'l':'p');
@@ -1369,7 +1412,7 @@ document.getElementById('btnExport').onclick = ()=>{
     const startX = margin*pxPerMM, startY = margin*pxPerMM;
     const pageTiles = tiles.slice(s*layout.cap, s*layout.cap+layout.cap);
 
-    if(showGuides){
+    if(true){ // guide lines always shown now
       drawGuideLines(ctx, {
         pageW: pw, pageH: ph, margin, gap, tileSize, cols: layout.cols, rows: layout.rows,
         originX: startX, originY: startY, unitScale: pxPerMM
