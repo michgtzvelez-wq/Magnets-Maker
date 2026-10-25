@@ -283,8 +283,8 @@ const { jsPDF } = window.jspdf;
 const state = {
   format: 'letter',
   shape: 'square',   // 'square' or 'round' — round uses cutMM as the button diameter
-  cutMM: 48,
-  bleedMM: 56,
+  cutMM: 50,
+  bleedMM: 54,
   marginMM: 10,
   gapMM: 13,
   safeMarginMM: 2,   // blank inset kept between the photo and the outer print edge, so nothing important folds to the back
@@ -299,7 +299,7 @@ const state = {
 };
 
 const MAGNET_SIZES = [
-  {key:'square',   shape:'square', cutMM:48, bleedMM:56, gapMM:13, safeMarginMM:2, label:'Square 48\u00d748mm'},
+  {key:'square',   shape:'square', cutMM:50, bleedMM:54, gapMM:13, safeMarginMM:2, label:'Square 50\u00d750mm'},
   {key:'round25',  shape:'round',  cutMM:25, bleedMM:31, gapMM:6,  safeMarginMM:2, label:'Round 25mm'},
   {key:'round32',  shape:'round',  cutMM:32, bleedMM:38, gapMM:9,  safeMarginMM:2, label:'Round 32mm'},
   {key:'round58',  shape:'round',  cutMM:58, bleedMM:64, gapMM:4,  safeMarginMM:2, label:'Round 58mm'},
