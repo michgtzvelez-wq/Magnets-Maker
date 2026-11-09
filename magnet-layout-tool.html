@@ -287,6 +287,7 @@ const state = {
   bleedMM: 54,
   marginMM: 10,
   gapMM: 13,
+  extraColMM: 0,     // extra sideways spacing between columns (on top of gapMM)
   safeMarginMM: 2,   // blank inset kept between the photo and the outer print edge, so nothing important folds to the back
   photos: [],              // {id,img,name,qty,zoom,offX,offY,filter,frame}
   selectedIds: new Set(),  // photos currently being edited together
@@ -299,11 +300,11 @@ const state = {
 };
 
 const MAGNET_SIZES = [
-  {key:'square',   shape:'square', cutMM:51, bleedMM:54, gapMM:13, safeMarginMM:2, label:'Square 51\u00d751mm'},
-  {key:'round25',  shape:'round',  cutMM:25, bleedMM:31, gapMM:6,  safeMarginMM:2, label:'Round 25mm'},
-  {key:'round32',  shape:'round',  cutMM:32, bleedMM:38, gapMM:9,  safeMarginMM:2, label:'Round 32mm'},
-  {key:'round58',  shape:'round',  cutMM:58, bleedMM:64, gapMM:4,  safeMarginMM:2, label:'Round 58mm'},
-  {key:'custom',   shape:null,     cutMM:null, bleedMM:null, gapMM:null, safeMarginMM:null, label:'Custom'}
+  {key:'square',   shape:'square', cutMM:51, bleedMM:54, gapMM:13, extraColMM:0, safeMarginMM:2, label:'Square 51\u00d751mm'},
+  {key:'round25',  shape:'round',  cutMM:25, bleedMM:31, gapMM:6,  extraColMM:0, safeMarginMM:2, label:'Round 25mm'},
+  {key:'round32',  shape:'round',  cutMM:32, bleedMM:38, gapMM:9,  extraColMM:0, safeMarginMM:2, label:'Round 32mm'},
+  {key:'round58',  shape:'round',  cutMM:58, bleedMM:64, gapMM:25, extraColMM:3, safeMarginMM:2, label:'Round 58mm'},
+  {key:'custom',   shape:null,     cutMM:null, bleedMM:null, gapMM:null, extraColMM:null, safeMarginMM:null, label:'Custom'}
 ];
 
 const FONTS = [
@@ -368,13 +369,14 @@ const PAGE_SIZES = {
 };
 function computeLayout(format, cutMM, bleedMM, marginMM, gapMM){
   const margin = marginMM, gap = gapMM;
+  const gapX = gap + (state.extraColMM||0);
   const pageKey = PAGE_SIZES[format] ? format : 'letter';
   const size = PAGE_SIZES[pageKey];
   function fit(pw, ph){
     const usableW = pw - 2*margin, usableH = ph - 2*margin;
-    const cols = Math.max(0, Math.floor((usableW + gap) / (bleedMM + gap)));
+    const cols = Math.max(0, Math.floor((usableW + gapX) / (bleedMM + gapX)));
     const rows = Math.max(0, Math.floor((usableH + gap) / (bleedMM + gap)));
-    return {cols, rows, cap: cols*rows, pw, ph, margin, gap};
+    return {cols, rows, cap: cols*rows, pw, ph, margin, gap, gapX};
   }
   const portrait = fit(size.w, size.h);
   const landscape = fit(size.h, size.w);
@@ -418,13 +420,13 @@ function renderSizeCards(){
     <div class="segmented format-filter">
       ${MAGNET_SIZES.map(s=>`<button data-s="${s.key}" class="${activeKey===s.key?'active':''}">${s.label}</button>`).join('')}
     </div>
-    <div class="format-info">${state.shape==='round' ? 'Round button magnets' : 'Square photo magnets'} &middot; ${state.cutMM}mm ${state.shape==='round'?'diameter':'cut size'} &middot; ${state.gapMM}mm gap &middot; ${state.bleedMM}mm printed image &middot; ${state.safeMarginMM}mm safe edge</div>`;
+    <div class="format-info">${state.shape==='round' ? 'Round button magnets' : 'Square photo magnets'} &middot; ${state.cutMM}mm ${state.shape==='round'?'diameter':'cut size'} &middot; ${state.gapMM}mm gap${state.extraColMM?` (+${state.extraColMM}mm sideways)`:''} &middot; ${state.bleedMM}mm printed image &middot; ${state.safeMarginMM}mm safe edge</div>`;
   el.querySelectorAll('button').forEach(b=>{
     b.onclick = ()=>{
       const s = MAGNET_SIZES.find(m=>m.key===b.dataset.s);
       if(s.shape){
         state.shape = s.shape; state.cutMM = s.cutMM; state.bleedMM = s.bleedMM;
-        state.gapMM = s.gapMM; state.safeMarginMM = s.safeMarginMM;
+        state.gapMM = s.gapMM; state.extraColMM = s.extraColMM; state.safeMarginMM = s.safeMarginMM;
       } else {
         state.shape = 'square';
       }
@@ -1152,15 +1154,17 @@ function renderSheetTabs(layout){
 
 // Draws full-sheet guillotine guide lines through the middle of every margin/gap band.
 // Works in any unit as long as pageW/pageH/margin/gap/tileSize/cols/rows/originX/originY/unitScale share that unit.
-function drawGuideLines(ctx, {pageW, pageH, margin, gap, tileSize, cols, rows, originX, originY, unitScale}){
+function drawGuideLines(ctx, {pageW, pageH, margin, gap, gapX, tileSize, cols, rows, originX, originY, unitScale}){
   if(gap<=0 && margin<=0) return;
   ctx.save();
   ctx.strokeStyle = 'rgba(0,0,0,0.4)';
   ctx.lineWidth = Math.max(1, unitScale*0.06);
   ctx.setLineDash([]);
+  const gx = (gapX===undefined ? gap : gapX);
   const step = tileSize + gap*unitScale;
+  const stepX = tileSize + gx*unitScale;
   const pageWpx = pageW*unitScale, pageHpx = pageH*unitScale;
-  const lastColEnd = originX + (cols-1)*step + tileSize;
+  const lastColEnd = originX + (cols-1)*stepX + tileSize;
   const lastRowEnd = originY + (rows-1)*step + tileSize;
 
   // vertical lines: left margin midline, between-column midlines, right margin midline
@@ -1168,7 +1172,7 @@ function drawGuideLines(ctx, {pageW, pageH, margin, gap, tileSize, cols, rows, o
   //  since column/row fitting can leave a slightly larger remainder there)
   const vXs = [];
   vXs.push(originX/2);
-  for(let c=1;c<cols;c++){ vXs.push(originX + c*step - (gap*unitScale)/2); }
+  for(let c=1;c<cols;c++){ vXs.push(originX + c*stepX - (gx*unitScale)/2); }
   vXs.push((lastColEnd + pageWpx)/2);
   vXs.forEach(x=>{
     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, pageHpx); ctx.stroke();
@@ -1206,25 +1210,26 @@ function renderStage(){
     return;
   }
 
-  const { margin, gap } = layout;
+  const { margin, gap, gapX } = layout;
   const startX = margin*scale, startY = margin*scale;
   const tileSize = state.bleedMM*scale;
   const step = (state.bleedMM+gap)*scale;
+  const stepX = (state.bleedMM+gapX)*scale;
 
   const startIdx = state.activeSheet * layout.cap;
   const pageTiles = tiles.slice(startIdx, startIdx+layout.cap);
-  state._stageMeta = { layout, startX, startY, tileSize, step, pageTiles };
+  state._stageMeta = { layout, startX, startY, tileSize, step, stepX, pageTiles };
 
   if(true){ // guide lines always shown now (cutter/guillotine distinction removed)
     drawGuideLines(ctx, {
-      pageW: pw, pageH: ph, margin, gap, tileSize, cols: layout.cols, rows: layout.rows,
+      pageW: pw, pageH: ph, margin, gap, gapX, tileSize, cols: layout.cols, rows: layout.rows,
       originX: startX, originY: startY, unitScale: scale
     });
   }
 
   pageTiles.forEach((photo, i)=>{
     const col = i % layout.cols, row = Math.floor(i/layout.cols);
-    const x = startX + col*step, y = startY + row*step;
+    const x = startX + col*stepX, y = startY + row*step;
     drawTile(ctx, x, y, tileSize, photo);
 
     // highlight selected tiles so it's clear what's active for editing
@@ -1341,7 +1346,7 @@ bindSetting('setGap','gapMM');
 document.getElementById('btnSaveTpl').onclick = async ()=>{
   const tpl = {
     format:state.format, shape:state.shape, cutMM:state.cutMM, bleedMM:state.bleedMM,
-    marginMM:state.marginMM, gapMM:state.gapMM, safeMarginMM:state.safeMarginMM,
+    marginMM:state.marginMM, gapMM:state.gapMM, extraColMM:state.extraColMM, safeMarginMM:state.safeMarginMM,
     textLayers: state.textLayers.map(L=>{
       const {customImg, ...rest} = L;
       return { ...rest, customImgSrc: customImg ? customImg.src : null };
@@ -1397,7 +1402,7 @@ document.getElementById('btnExport').onclick = ()=>{
 
   const pdf = new jsPDF({ orientation: layout.orientation==='landscape'?'l':'p', unit:'mm', format:pdfFormat });
   const sheets = Math.ceil(tiles.length/layout.cap);
-  const { margin, gap } = layout;
+  const { margin, gap, gapX } = layout;
 
   for(let s=0; s<sheets; s++){
     if(s>0) pdf.addPage(pdfFormat, layout.orientation==='landscape'?'l':'p');
@@ -1409,19 +1414,20 @@ document.getElementById('btnExport').onclick = ()=>{
 
     const tileSize = state.bleedMM*pxPerMM;
     const step = (state.bleedMM+gap)*pxPerMM;
+    const stepX = (state.bleedMM+gapX)*pxPerMM;
     const startX = margin*pxPerMM, startY = margin*pxPerMM;
     const pageTiles = tiles.slice(s*layout.cap, s*layout.cap+layout.cap);
 
     if(true){ // guide lines always shown now
       drawGuideLines(ctx, {
-        pageW: pw, pageH: ph, margin, gap, tileSize, cols: layout.cols, rows: layout.rows,
+        pageW: pw, pageH: ph, margin, gap, gapX, tileSize, cols: layout.cols, rows: layout.rows,
         originX: startX, originY: startY, unitScale: pxPerMM
       });
     }
 
     pageTiles.forEach((photo,i)=>{
       const col = i%layout.cols, row = Math.floor(i/layout.cols);
-      const x = startX+col*step, y = startY+row*step;
+      const x = startX+col*stepX, y = startY+row*step;
       drawTile(ctx, x, y, tileSize, photo);
     });
 
@@ -1448,10 +1454,10 @@ document.getElementById('btnExport').onclick = ()=>{
   function hitTest(px, py){
     const m = state._stageMeta;
     if(!m || !m.pageTiles.length) return null;
-    const col = Math.floor((px-m.startX)/m.step);
+    const col = Math.floor((px-m.startX)/m.stepX);
     const row = Math.floor((py-m.startY)/m.step);
     if(col<0 || row<0 || col>=m.layout.cols) return null;
-    const localX = px - m.startX - col*m.step;
+    const localX = px - m.startX - col*m.stepX;
     const localY = py - m.startY - row*m.step;
     if(localX<0 || localX>m.tileSize || localY<0 || localY>m.tileSize) return null;
     const idx = row*m.layout.cols + col;
